@@ -1,6 +1,10 @@
 package resolve
 
-import "testing"
+import (
+	"os"
+	"strings"
+	"testing"
+)
 
 // harvestRulesDir points at the real harvest/rules/ directory — not a
 // fixture copy. If someone edits harvest/rules/cannabinoids.json and breaks
@@ -102,3 +106,62 @@ func TestLoadRuleSetMissingDir(t *testing.T) {
 		t.Error("expected an error loading a nonexistent rules directory, got nil")
 	}
 }
+
+// TestLoadRuleSetMissingRequiredKey proves the fail-fast validation added
+// during the M1 recheck actually fails fast: a harvest/rules/*.json missing
+// a key that cannabinoids.go/facets.go index directly (rs.Patterns["x"],
+// rs.FormWordLists["x"], no per-call nil check) must error at LoadRuleSet
+// time with a clear message, not panic later the first time business logic
+// happens to reach that code path.
+func TestLoadRuleSetMissingRequiredKey(t *testing.T) {
+	t.Run("cannabinoids.json missing a required pattern", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir+"/cannabinoids.json", `{"patterns": {"cbd_label_first": "CBD"}}`)
+		writeFile(t, dir+"/categories.json", validCategoriesJSON)
+
+		_, err := LoadRuleSet(dir)
+		if err == nil {
+			t.Fatal("expected an error for missing required cannabinoid patterns, got nil")
+		}
+		if !strings.Contains(err.Error(), "missing required pattern") {
+			t.Errorf("error = %q, want it to name the missing pattern clearly", err.Error())
+		}
+	})
+
+	t.Run("categories.json missing a required form word list", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir+"/cannabinoids.json", validCannabinoidsJSON)
+		writeFile(t, dir+"/categories.json", `{"form_word_lists": {"topical": ["balm"]}}`)
+
+		_, err := LoadRuleSet(dir)
+		if err == nil {
+			t.Fatal("expected an error for missing required form word lists, got nil")
+		}
+		if !strings.Contains(err.Error(), "missing required form_word_lists entry") {
+			t.Errorf("error = %q, want it to name the missing entry clearly", err.Error())
+		}
+	})
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Minimal-but-complete stand-ins covering every required key, used only to
+// isolate the OTHER file's validation failure in the two subtests above.
+var validCannabinoidsJSON = `{"patterns": {
+	"cbd_label_first": "CBD", "cbd_num_first": "CBD", "thc_label_first": "THC", "thc_num_first": "THC",
+	"pct_cbd": "CBD%", "pct_thc": "THC%", "volume_ml": "ml", "weight_g": "g", "generic_mg": "mg",
+	"hemp_seed": "hemp", "ratio_num_first": "ratio", "ratio_label_first": "ratio",
+	"thc_dominant_wording": "dominant", "ratio_bare": "bare", "chem_name_cannabidiol": "cannabidiol",
+	"chem_name_thc": "tetrahydrocannabinol", "thc_free": "free", "trace_thc": "trace", "cannabinoid_pair": "pair"
+}}`
+
+var validCategoriesJSON = `{"form_word_lists": {
+	"edible_solid": ["x"], "edible": ["x"], "topical": ["x"], "smokable": ["x"],
+	"vapeable": ["x"], "tincture": ["x"], "beverage": ["x"], "extract": ["x"]
+}, "pet_strong_description_phrase": "x", "pet_warning_sentence_strip": "x",
+"concentrate_markers": "x", "negation_strip_pattern": "x", "negation_strip_pattern_2": "x"}`

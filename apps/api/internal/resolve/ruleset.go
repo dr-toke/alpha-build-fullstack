@@ -137,7 +137,34 @@ func loadCannabinoids(path string) (*CannabinoidRuleSet, error) {
 		}
 		patterns[name] = re
 	}
+	for _, req := range requiredCannabinoidPatterns {
+		if _, ok := patterns[req]; !ok {
+			return nil, fmt.Errorf("%s: missing required pattern %q", path, req)
+		}
+	}
 	return &CannabinoidRuleSet{Patterns: patterns}, nil
+}
+
+// requiredCannabinoidPatterns and requiredFormWordLists exist so a
+// harvest/rules/*.json edit that drops a key cannabinoids.go/facets.go
+// depends on fails LOUDLY at LoadRuleSet time — a fmt.Errorf naming exactly
+// which key is missing — instead of failing SILENTLY later as a nil
+// *regexp.Regexp panic the first time classify() or ExtractCannabinoids
+// happens to reach that specific code path. Found during a recheck pass:
+// rs.Patterns["x"] and rs.FormWordLists["x"] are indexed directly
+// throughout cannabinoids.go and facets.go with no per-call nil check —
+// correct and appropriately terse AS LONG AS the loader guarantees every
+// key those two files reference actually exists. This is that guarantee,
+// enforced once, at the one place a missing key can still be caught cleanly.
+var requiredCannabinoidPatterns = []string{
+	"cbd_label_first", "cbd_num_first", "thc_label_first", "thc_num_first",
+	"pct_cbd", "pct_thc", "volume_ml", "weight_g", "generic_mg", "hemp_seed",
+	"ratio_num_first", "ratio_label_first", "thc_dominant_wording", "ratio_bare",
+	"chem_name_cannabidiol", "chem_name_thc", "thc_free", "trace_thc", "cannabinoid_pair",
+}
+
+var requiredFormWordLists = []string{
+	"edible_solid", "edible", "topical", "smokable", "vapeable", "tincture", "beverage", "extract",
 }
 
 func loadCategories(path string) (*CategoryRuleSet, error) {
@@ -170,6 +197,11 @@ func loadCategories(path string) (*CategoryRuleSet, error) {
 	negation2, err := regexp.Compile(raw.NegationStripPattern2)
 	if err != nil {
 		return nil, fmt.Errorf("%s: negation_strip_pattern_2: %w", path, err)
+	}
+	for _, req := range requiredFormWordLists {
+		if _, ok := formLists[req]; !ok {
+			return nil, fmt.Errorf("%s: missing required form_word_lists entry %q", path, req)
+		}
 	}
 
 	return &CategoryRuleSet{

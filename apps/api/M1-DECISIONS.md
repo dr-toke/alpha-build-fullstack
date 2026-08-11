@@ -275,6 +275,61 @@ asked for.
 
 ---
 
+## Recheck pass, 2026-08-11 (same day, after the initial build)
+
+Asked to recursively recheck M1 and confirm best practices. Ran
+`staticcheck` (installed fresh, wasn't available before) and `go test
+-cover` across the whole module, then re-read every file line-by-line
+rather than trusting the green test run. `staticcheck ./...` and `go vet
+-all ./...`: zero findings, both passes. The manual re-read found five real
+issues static analysis doesn't catch — logic and coverage gaps, not style:
+
+1. **`ruleset.go` had no fail-fast validation.** `rs.Patterns["x"]` and
+   `rs.FormWordLists["x"]` are indexed directly, with no per-call nil
+   check, throughout `cannabinoids.go` and `facets.go` — correct and
+   appropriately terse, but only as long as the loader guarantees every key
+   those two files reference actually exists. It didn't guarantee that: a
+   `harvest/rules/*.json` edit dropping a key would have loaded
+   successfully and then panicked on a nil `*regexp.Regexp` the first time
+   business logic happened to reach that specific code path — far from
+   the actual cause, at runtime, in production. Fixed:
+   `requiredCannabinoidPatterns` / `requiredFormWordLists` checked right
+   after parsing, `LoadRuleSet` now errors immediately naming exactly which
+   key is missing. `TestLoadRuleSetMissingRequiredKey` proves it.
+2. **`Tokens` split domain vocabulary on underscores.** `full_spectrum`,
+   `oil_tincture`, `cbd_dominant` — every enum value in `domain.go` — would
+   have come back as two tokens, not one, the first time anything actually
+   called `Tokens` (nothing does yet, which is exactly why this had zero
+   coverage and zero chance of being noticed otherwise). Found by writing
+   `text_test.go` — which itself exists because a coverage check
+   (`go test -cover`) turned up `Normalize`/`Tokens` at a flat 0%: exported
+   API, per `08-BUILD-ORDERS.md §7`'s file list, with no test at all.
+3. **`resolveForm`'s concentrate-sub-word check had a stray `lowName+" "`**
+   — harmless (a trailing space doesn't change a `\b`-anchored regex
+   match), but dead, confusing code left over from an earlier draft.
+   Removed.
+4. **`ResolveRoute`'s pet/apparel case returned `Reason: ""`.** The
+   `!hasRoute` branch conflated two different situations under one
+   `Ambiguous: true` — "route genuinely doesn't apply" (pet/apparel) and
+   "couldn't classify at all" (the true `other` case) — and only the
+   second had a reason string. `resolveForm`'s pet/apparel returns now
+   carry `"route not applicable to pet products"` / `"...to apparel"`
+   instead of an empty string.
+
+Coverage after fixes: **91.4%** (was 89.9% before adding `text_test.go`).
+Remaining gaps are almost entirely defensive branches in ported code
+(`orientRatio`'s `a<=0 && b<=0` guard, `BestMG`'s post-switch fallback ifs)
+that real product data may or may not ever exercise — deliberately not
+chased to 100%, since the ported algorithm's own shape, not test-writing
+effort, is what determines whether those branches are reachable.
+
+**On long functions** (`ExtractCannabinoids` 166 lines, `classify` 113):
+flagged by a manual complexity check, not fixed. Both lengths track the
+harvested source's own function lengths closely — breaking either into
+smaller pieces would mean restructuring control flow that
+`harvest/NOTES.md` explicitly warns against flattening. Long-but-faithful
+beats short-but-restructured here.
+
 ## What's genuinely unverifiable without more context
 
 Two things this document can flag but not resolve:

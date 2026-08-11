@@ -16,7 +16,12 @@ func Normalize(s string) string {
 	return strings.TrimSpace(reWhitespace.ReplaceAllString(strings.ToLower(s), " "))
 }
 
-var reTokenSplit = regexp.MustCompile(`[^a-z0-9]+`)
+// Underscore is deliberately NOT a split character — this codebase's own
+// vocabulary is full of underscore-joined domain terms (full_spectrum,
+// oil_tincture, cbd_dominant, every value in domain.go's enums) that are one
+// token, not two. Caught by TestTokens expecting "broad_spectrum" to survive
+// as a single token and a first draft splitting it into "broad"/"spectrum".
+var reTokenSplit = regexp.MustCompile(`[^a-z0-9_]+`)
 
 // Tokens splits normalized text into non-empty word tokens. Not used by the
 // regex-driven matchers in this package (harvest/rules/categories.json's

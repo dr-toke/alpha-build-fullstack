@@ -240,9 +240,9 @@ func resolveForm(name string, d formDetection) (form domain.FormValue, route dom
 
 	switch d.primary {
 	case "pet":
-		return domain.FormPet, "", false, 0.95, false, ""
+		return domain.FormPet, "", false, 0.95, false, "route not applicable to pet products"
 	case "apparel":
-		return domain.FormApparel, "", false, 0.95, false, ""
+		return domain.FormApparel, "", false, 0.95, false, "route not applicable to apparel"
 	case "topical":
 		return domain.FormTopical, domain.RouteTopical, true, confidence, d.ambiguous, d.reason
 	case "tincture":
@@ -280,7 +280,7 @@ func resolveForm(name string, d formDetection) (form domain.FormValue, route dom
 		if d.viaConcentrateMarker {
 			return domain.FormConcentrate, domain.RouteInhaled, true, confidence, d.ambiguous, d.reason
 		}
-		if ok, _ := MatchWordBoundary(concentrateSubWords, lowName+" "); ok {
+		if ok, _ := MatchWordBoundary(concentrateSubWords, lowName); ok {
 			return domain.FormConcentrate, domain.RouteInhaled, true, confidence, d.ambiguous, d.reason
 		}
 		return domain.FormVape, domain.RouteInhaled, true, confidence, d.ambiguous, d.reason
