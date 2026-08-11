@@ -8,8 +8,10 @@
     "cbd_mg": null,
     "thc_mg": null,
     "concentration_type": "hemp_seed",
-    "form": "nutrition",
+    "form": "oil_tincture",
+    "route": "sublingual",
     "price_per_mg": null
   },
-  "regression_note": "hemp_seed gate is NAME-FIRST: a product literally named 'Hemp Seed Oil' is seed oil, full stop — even if a description elsewhere name-drops CBD for comparison (see the separate 'NAMED hemp seed oil stays seed oil despite CBD mention in desc' case in the same test file, not duplicated here). This is a Constitution rule (00-CONSTITUTION.md §3, 03-DOMAIN-MODEL.md §3): concentration_type=hemp_seed means the API returns price_per_mg=NULL forever, never a computed number."
+  "regression_note": "hemp_seed gate is NAME-FIRST: a product literally named 'Hemp Seed Oil' is seed oil, full stop — even if a description elsewhere name-drops CBD for comparison (see the separate 'NAMED hemp seed oil stays seed oil despite CBD mention in desc' case in the same test file, not duplicated here). This is a Constitution rule (00-CONSTITUTION.md §3, 03-DOMAIN-MODEL.md §3): concentration_type=hemp_seed means the API returns price_per_mg=NULL forever, never a computed number.",
+  "corrected_2026-08-11": "form was originally written as 'nutrition' during the harvest session, before internal/resolve/facets.go's legacy-bucket-to-new-facet mapping was actually implemented. 03-DOMAIN-MODEL.md §2's form enum has no 'nutrition' value at all, and running the real word-list logic against this title shows 'oil' matches the tincture bucket (harvest/rules/categories.json's tincture list includes 'oil'/'oils') before nutrition's weaker fallback ever gets a chance (nutrition only fires when the form set is otherwise EMPTY). Corrected to what the classifier actually produces, not what seemed intuitive before the code existed — see M1-DECISIONS.md's form-mapping section."
 }

@@ -101,7 +101,49 @@ Sentinel errors in `var (...)`: `ErrNotFound`, `ErrValidationFailed`,
 
 ## package resolve
 
-_(M2 — pending)_
+_(M1 — the rule engine: text.go, evidence.go, ruleset.go, match.go,
+cannabinoids.go, facets.go, precedence.go, legacy.go, value.go)_
+
+```
+func DominantPerMg(cbdPerMg, thcPerMg, totalPerMg *float64) (perMg *float64, basis domain.Basis)
+func LegacyCategories(category string, secondary []string) []string
+func LegacyCategory(form domain.FormValue, route domain.RouteValue, concentrationType domain.ConcentrationType) (category string, secondary []string)
+func Normalize(s string) string
+func PerMg(pricePaise int64, mg float64) *float64
+func Publishable(purchasable bool, formConfidence float32, route *domain.ProductFacet, pricePaise int64) bool
+func RankScore(valueScore, facetConfidence, brandTrust, completeness float64) float64
+func Resolve(clusterID uuid.UUID, facet domain.Facet, in FacetInputs, classifierVersion int) *domain.ProductFacet
+func Tokens(s string) []string
+func ValueScore(perMg float64) float64
+func ValueTier(perMg *float64) *domain.ValueTier
+type CannabinoidExtraction struct {
+func ExtractCannabinoids(rs *CannabinoidRuleSet, name, description string) CannabinoidExtraction
+func (r CannabinoidExtraction) BestMG() float64
+type CannabinoidRuleSet struct {
+type CategoryRuleSet struct {
+type CoherenceMatrix struct {
+type Evidence struct {
+func Merge(a, b Evidence) Evidence
+type FacetInputs struct {
+type FacetResult struct {
+func ResolveCarrier(description string) FacetResult
+func ResolveExtract(name, description string) FacetResult
+func ResolveForm(rs *CategoryRuleSet, name, description, rawCategory string) FacetResult
+func ResolveProfile(cbdMg, thcMg float64) FacetResult
+func ResolvePurchasable(rs *CategoryRuleSet, name, description, rawCategory string) FacetResult
+func ResolveRoute(rs *CategoryRuleSet, name, description, rawCategory string) FacetResult
+type RuleSet struct {
+func LoadRuleSet(dir string) (*RuleSet, error)
+type Span struct {
+func ApplyNegation(s string, cat *CategoryRuleSet) (stripped string, negated []Span)
+func MatchWordBoundary(re *regexp.Regexp, s string) (matched bool, spans []Span)
+func NegationWindows(s string, negation *regexp.Regexp) (stripped string, windows []Span)
+```
+
+`ResolveProfile` is not in `08-BUILD-ORDERS.md §7`'s named export list for
+facets.go — added because `03-DOMAIN-MODEL.md §2` lists `profile` as one of
+six facets and the build order's list only named five. See
+`M1-DECISIONS.md`.
 
 ## package store
 
