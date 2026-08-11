@@ -377,6 +377,31 @@ header) described the *pre-monorepo* state and has been corrected to match.
 
 ---
 
+## ADR-019 — Compliance/RBAC depth deferred to beta; M2 scope note
+
+**Status:** accepted — a scope note, not an implementation. No code written.
+
+**Decision:** when `internal/compliance` (M2, `08-BUILD-ORDERS.md §7`) is
+eventually built, it will include only **basic RBAC** — a minimal role
+concept (e.g. a `role` field on `admin_users`, M0), not a full permissions
+subsystem. `filter.go`'s hard-block/review-tier logic
+(`harvest/rules/compliance.json`) stays as scoped in `04-PIPELINE.md §5`.
+Nothing beyond that — no permissions table, no per-action middleware
+enforcement across facet overrides / brand approval / moderation — gets
+built as part of "basic."
+
+**Why:** stakeholder direction — the project is pre-alpha. A real compliance
+review process is scheduled for when a beta is ready, not before. Building
+deep RBAC/compliance infrastructure now would be solving a problem the
+project hasn't reached yet.
+
+**Consequence:** M2 remains not-yet-started as of this decision. This ADR
+exists so the scope is written down before M2 begins, rather than decided
+implicitly by whoever picks it up — "basic" means the role field, nothing
+more, until a beta triggers the real review this ADR defers.
+
+---
+
 ## Superseded
 
 | Was | Now | Where |
@@ -414,3 +439,7 @@ header) described the *pre-monorepo* state and has been corrected to match.
 7. **Zero-trust implementation detail.** ADR-014 sets the principle;
    per-service credential scoping, mutual TLS for any internal service-to-service
    traffic, and a threat-model pass are pre-launch execution, not yet done.
+8. **Compliance/RBAC depth.** ADR-019 scopes M2 to "basic RBAC" only (a role
+   field, nothing more); the real compliance review process is explicitly
+   deferred until a beta build exists, per project owner (2026-08-11).
+   M2 itself hasn't started.
