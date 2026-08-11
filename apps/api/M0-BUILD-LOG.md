@@ -17,43 +17,104 @@ is close to mechanical transcription of `03-DOMAIN-MODEL.md`.
 
 ## 1. What was actually verified, not just written
 
-I had a real Go 1.26 toolchain and Docker in this environment, so I didn't
-stop at "the SQL looks right":
+First pass, I validated by hand: spun up a `postgres:16` Docker container,
+ran migrations up/down/up via the `goose` CLI, ran a handful of positive and
+negative `psql` inserts against live constraints, then tore the container
+down. That proved the schema worked *once, on my machine, in a session
+nobody else can re-run*. When asked to make sure this was "actually done," I
+went back and turned that manual session into permanent, repeatable tests
+instead — the distinction matters: **anyone running `go test ./...` now gets
+the same verification I did by hand, on demand, forever**, not just my say-so
+that I once ran some commands.
 
 - `go mod init`. Tried pre-fetching every package in `00-CONSTITUTION.md §6`'s
   allowlist (chi, pgx/v5, river + riverpgxv5, goose, colly, minio-go,
   golang.org/x/crypto) up front, then ran `go mod tidy` — which correctly
-  pruned all of them back out, because M0's actual Go code (`domain`) only
-  imports `github.com/google/uuid`. Left it tidied rather than fighting the
-  module graph: `go.mod` should reflect what's imported, not what's
-  eventually allowed to be imported. The rest of the allowlist gets added via
-  plain `go get` the moment M2/M3/M4/M5's code first imports each one — that
-  is the normal, expected shape of an incrementally-built Go module, not a
-  gap. `go.mod`'s `go` directive is `1.25` to match `08-BUILD-ORDERS.md §4`'s
-  stated target (the local toolchain is 1.26.5, which builds a `go 1.25`
-  module fine).
-- Ran all **7 migrations up** against a real `postgres:16` Docker container.
-- Ran all **7 migrations down**, then back **up** again — the rollback path
-  is real, not just written and hoped-for.
-- Ran positive AND negative INSERT tests against live constraints:
-  `comments`' exactly-one-of-`(post_id, cluster_id)` CHECK correctly
-  rejected a row with neither set; `product_facets`' facet-name CHECK
-  correctly rejected `'not_a_real_facet'`; a valid comment insert succeeded.
-- `gofmt -l .`, `go build ./...`, `go vet ./...`, `go test ./...` all clean
-  (`go test` reports "no test files" for `internal/domain` — expected, M0's
-  file list has no `_test.go` for this package).
-- **One real bug was caught by this**, not by inspection: a `CREATE INDEX`
-  on `date_trunc('day', clicked_at)` failed with *"functions in index
-  expression must be marked IMMUTABLE"* — `date_trunc` on a `timestamptz` is
-  timezone-dependent (STABLE), not IMMUTABLE, so Postgres rejects it in an
-  index. Fixed by indexing `clicked_at` directly (a plain range index is what
-  `/admin/analytics/clicks?days=30` needs anyway). This is exactly the kind
-  of error that reads as correct SQL and silently isn't — worth remembering
-  next time a migration reaches for a functional index.
+  pruned all of them back out, because M0's Go code only imports what it
+  actually uses (`github.com/google/uuid` in `domain`;
+  `github.com/pressly/goose/v3` + `github.com/jackc/pgx/v5/stdlib` once the
+  migration test was added). Left it tidied rather than fighting the module
+  graph: `go.mod` should reflect what's imported, not what's eventually
+  allowed to be imported. The rest of the allowlist (chi, river, colly,
+  minio-go, x/crypto) gets added via plain `go get` the moment M2–M5's code
+  first imports each one — normal incremental-module growth, not a gap.
+  `go.mod`'s `go` directive tracks `1.25` per `08-BUILD-ORDERS.md §4`'s
+  stated target. `go mod tidy` keeps normalising it to `1.25.7` — one of the
+  now-real dependencies (goose or pgx) declares that as its actual minimum in
+  its own `go.mod`, so this is `tidy` satisfying the real module graph, not a
+  stray auto-bump to fight. `1.25.7` is still a Go 1.25 release; left as-is.
 
-The throwaway container (`drtoke-m0-check`) was removed after validation. No
-`docker-compose.yml` / persistent dev DB was created as part of M0 — that's
-`09-OPS.md §1`'s job, not this one.
+- **`internal/db/migrations/migrations_test.go`** — a real Go test, not a
+  shell transcript. `docker run`s its own throwaway `postgres:16` container
+  on a docker-assigned free port (`t.Skip`s gracefully if `docker` isn't on
+  `PATH`, so this doesn't break `go test ./...` on a machine without it),
+  applies all 7 migrations via `goose.Up`, asserts every one of the 24
+  tables the migrations claim to create actually exists, rolls all the way
+  back down via `goose.DownTo`, asserts they're all gone, re-applies, and
+  tears the container down in `t.Cleanup`. Three tests:
+  - `TestMigrationsUpDown` — the up/down/up round-trip above.
+  - `TestSeedData` — the 12 harvested brands landed, `scrape_sources` has
+    exactly the PoC-scoped `cbdstore` row, `aggregators.cbdstore-india`'s
+    `source_slug` correctly points at it while `itshemp`'s is correctly NULL
+    (scraper not built yet).
+  - `TestConstraints` — 16 table-driven subtests, most of them the exact
+    manual checks from the first pass, **plus new ones the manual pass
+    didn't cover**: comments rejects `post_id`+`cluster_id` **both set**
+    (the manual pass only checked "neither set" — "both set" is the more
+    common exactly-one-of bug, and it does correctly reject); the body-length
+    CHECK actually enforces its 10-char floor; all six facet values
+    (`form`/`route`/`extract`/`profile`/`carrier`/`purchasable`) insert
+    successfully, not just that a bad one is rejected; `value_tier` rejects
+    `'excellent'` (ADR-012's bands are `good`/`mid`/`high`, not the doc's
+    original four-tier names — a real regression this test would have caught
+    if the migration had been written against the stale value_tier table);
+    `product_listings`' `UNIQUE(source_slug, source_url)` genuinely rejects a
+    duplicate, which is the constraint that makes the harvested Shopify
+    per-variant-URL fix (`harvest/scrapers/cbdstore.yaml`) meaningful rather
+    than decorative; and `product_facets`' `ON DELETE CASCADE` genuinely
+    removes facets when their cluster is deleted.
+
+- **`internal/domain/errors_test.go`** — no database needed, runs in 6ms.
+  Confirms all nine sentinel errors are mutually distinct under `errors.Is`
+  (a copy-paste mistake could silently alias two of the
+  `02-FRONTEND-CONTRACT.md §3` error codes onto the same value), that
+  `fmt.Errorf("%w", ...)`-wrapping still satisfies `errors.Is` (the
+  convention `08-BUILD-ORDERS.md §4` mandates everywhere), and — the one that
+  actually matters most — that `ClusterMovedError` does **NOT** satisfy
+  `errors.Is(err, ErrNotFound)`. That's not a hypothetical: a handler doing a
+  lazy `if errors.Is(err, ErrNotFound) { 404 }` check without an explicit
+  `errors.As(err, &ClusterMovedError{})` branch first would silently 404 a
+  merged-product request that should have redirected — exactly the bug
+  `02-FRONTEND-CONTRACT.md §4`'s "empty-array and 503 are different states"
+  framing warns about, one status-code family over.
+  `TestEnumValuesMatchMigrationChecks` pins ~30 Go enum constants to the
+  exact string literal their migration's `CHECK` expects, so a renamed
+  constant *value* (not just identifier) fails fast in a 6ms unit test
+  instead of a much slower, much later live-Postgres integration failure.
+
+- `gofmt -l .`, `go build ./...`, `go vet ./...` all clean.
+  `go test ./...` — **all 7 tests pass** (4 unit, 3 integration), full run
+  ~21s (each integration test starts its own container; they could share one
+  via `TestMain` to run faster, not done here since M0's test surface is
+  small enough that clarity-per-test beat shaving 15 seconds).
+
+- **Two real bugs were caught by this, not by inspection:**
+  1. `CREATE INDEX ... (date_trunc('day', clicked_at))` failed with
+     *"functions in index expression must be marked IMMUTABLE"* —
+     `date_trunc` on a `timestamptz` is timezone-dependent (STABLE), not
+     IMMUTABLE. Fixed by indexing `clicked_at` directly.
+  2. `goose.DownTo(db, 0)` doesn't compile — the real signature is
+     `DownTo(db, dir, version, ...opts)`, missing the migrations-directory
+     argument. Caught by `go vet`, not by `go test` even running — it never
+     got that far the first time.
+
+  Both are the kind of error that reads as plausible and isn't; both were
+  caught by actually running the thing, not by re-reading it more carefully.
+
+No `docker-compose.yml` / persistent dev DB was created as part of M0 —
+that's `09-OPS.md §1`'s job. The test suite's containers are genuinely
+throwaway, one per test run, confirmed cleaned up (`docker ps -a` shows none
+left behind after the suite finishes).
 
 ---
 
