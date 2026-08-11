@@ -377,28 +377,36 @@ header) described the *pre-monorepo* state and has been corrected to match.
 
 ---
 
-## ADR-019 — Compliance/RBAC depth deferred to beta; M2 scope note
+## ADR-019 — `internal/compliance` (M2) stays a placeholder until beta
 
 **Status:** accepted — a scope note, not an implementation. No code written.
+**Corrected 2026-08-11**, same day: the first version of this ADR only
+deferred RBAC *depth* while still treating `filter.go`'s hard-block/review
+logic as buildable now. That was a misreading — the placeholder covers the
+whole package, not just an RBAC layer on top of it.
 
-**Decision:** when `internal/compliance` (M2, `08-BUILD-ORDERS.md §7`) is
-eventually built, it will include only **basic RBAC** — a minimal role
-concept (e.g. a `role` field on `admin_users`, M0), not a full permissions
-subsystem. `filter.go`'s hard-block/review-tier logic
-(`harvest/rules/compliance.json`) stays as scoped in `04-PIPELINE.md §5`.
-Nothing beyond that — no permissions table, no per-action middleware
-enforcement across facet overrides / brand approval / moderation — gets
-built as part of "basic."
+**Decision:** `internal/compliance` is **not built yet, at all** — not
+`filter.go`'s `Evaluate` function, not `filter_test.go`, none of it. The
+package stays a placeholder: at most a stub (a `role` field on
+`admin_users`, M0, if a schema hook is needed elsewhere before M2 proper
+starts) but not the actual hard-block/review-tier filter, even though its
+rules are already harvested and sitting in `harvest/rules/compliance.json`
+ready to use. Real compliance review — building `filter.go` for real, and
+the RBAC/permissions work around who can act on its output — happens when a
+beta build exists, not before.
 
-**Why:** stakeholder direction — the project is pre-alpha. A real compliance
-review process is scheduled for when a beta is ready, not before. Building
-deep RBAC/compliance infrastructure now would be solving a problem the
-project hasn't reached yet.
+**Why:** stakeholder direction — the project is pre-alpha. Compliance is
+the one subsystem with real legal/reputational weight (it's what decides
+whether a product description gets hidden or flagged), and building it
+before there's a beta to review it against was explicitly called out as
+premature.
 
-**Consequence:** M2 remains not-yet-started as of this decision. This ADR
-exists so the scope is written down before M2 begins, rather than decided
-implicitly by whoever picks it up — "basic" means the role field, nothing
-more, until a beta triggers the real review this ADR defers.
+**Consequence:** `08-BUILD-ORDERS.md §7`'s M2 is skipped for now.
+`internal/ingest`'s pipeline stage list (`04-PIPELINE.md §1`) includes a
+`compliance` step between `resolve` and `dedup` — when M4 is built before
+M2 exists, that stage needs an explicit pass-through stub (everything
+proceeds to `dedup` unfiltered) rather than silently omitting the stage,
+so the gap is visible in the pipeline, not hidden by its absence.
 
 ---
 
@@ -439,7 +447,8 @@ more, until a beta triggers the real review this ADR defers.
 7. **Zero-trust implementation detail.** ADR-014 sets the principle;
    per-service credential scoping, mutual TLS for any internal service-to-service
    traffic, and a threat-model pass are pre-launch execution, not yet done.
-8. **Compliance/RBAC depth.** ADR-019 scopes M2 to "basic RBAC" only (a role
-   field, nothing more); the real compliance review process is explicitly
-   deferred until a beta build exists, per project owner (2026-08-11).
-   M2 itself hasn't started.
+8. **`internal/compliance` (M2) unbuilt.** ADR-019: the whole package is a
+   placeholder until a beta build exists, per project owner (2026-08-11) —
+   not just RBAC depth. `filter.go` is skipped, not simplified. Any
+   pipeline milestone built before it (M4's ingest stage list) needs an
+   explicit pass-through stub where compliance would run, not a silent gap.
