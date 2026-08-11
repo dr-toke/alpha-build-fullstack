@@ -1,0 +1,14 @@
+{
+  "_meta": {
+    "source": "dr-toke-init/apps/api/internal/db/migrations/026_reference_content.sql (INSERT INTO aggregators)",
+    "extracted_at": "2026-08-11",
+    "note": "source_slug links each aggregator to its scraper (registry.go). cbdstore-india's source_slug='cbdstore' is exactly the PoC scraper being harvested in this pass — see harvest/scrapers/cbdstore.yaml."
+  },
+  "aggregators": [
+    { "slug": "itshemp", "name": "ItsHemp", "url": "https://itshemp.in", "description": "India's largest hemp and cannabis marketplace, spanning oils, edibles, topicals, and wellness.", "source_slug": "itshemp", "brand_count_label": "80+", "product_count_label": "3500+", "display_order": 10 },
+    { "slug": "cbdstore-india", "name": "CBD Store India", "url": "https://cbdstore.in", "description": "Medical cannabis focus. Prescription-based product sales. Wide brand selection including Cannabryl, Magiccann, Cannazo.", "source_slug": "cbdstore", "brand_count_label": null, "product_count_label": null, "display_order": 20 },
+    { "slug": "cannameds-india", "name": "CannaMeds India", "url": "https://cannameds.in", "description": "Medical cannabis products with doctor consultation services integrated.", "source_slug": "cannameds", "brand_count_label": null, "product_count_label": null, "display_order": 30 }
+  ],
+  "trusted_for_compliance": ["itshemp", "cbdstore", "cannameds"],
+  "note_on_counts": "derived_brand_count / derived_product_count columns (not shown here, they're runtime-computed) override the static labels when a source_slug is set and we're actively scraping it — see 03-DOMAIN-MODEL.md §7 and internal/jobs/reference_health.go for the recomputation job."
+}

@@ -1,0 +1,13 @@
+{
+  "source": "categories_test.go:TestRealFailures (\"dog mantra (pet exclusive)\")",
+  "raw": {
+    "title": "Calmosis Dog Mantra | India's Premium Vet-Approved THC-Free Tincture",
+    "description": "calming drops for dogs"
+  },
+  "expect": {
+    "form": "pet",
+    "purchasable": true,
+    "forbid_categories_legacy": ["smokable", "tincture", "vapeable"]
+  },
+  "regression_note": "Pet is checked NAME-FIRST and EXCLUSIVELY, before any other form detection runs — 'Tincture' is right there in the product name, but pet must win outright, not merge with tincture as a secondary tag. Contrast with dog-mantra: a genuinely THC-free tincture that happens to be for dogs is 100% pet, 0% tincture in the public catalogue."
+}

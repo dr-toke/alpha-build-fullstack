@@ -1,0 +1,65 @@
+{
+  "_meta": {
+    "source": "dr-toke-init/apps/api/internal/catalog/normaliser/categories.go",
+    "extracted_at": "2026-08-11",
+    "warning": "Same caveat as cannabinoids.json: ClassifyWithConfidence() is procedural — name-first-then-description-fallback, a coherence matrix that DELETES incompatible forms after detection, and pet/apparel short-circuits BEFORE form detection ever runs. This is the exact algorithm that ADR-002 / the facet refactor (01-ARCHITECTURE.md §4) replaces the single-category-column version of. Port the control flow as Go code in internal/resolve/facets.go; these word lists are the loaded-from-JSON data.",
+    "three_failure_modes_that_drove_this_design": [
+      "Negated marketing copy: \"No need to smoke or vape; take the capsule with water\" made a capsule vapeable. Fix: negation windows stripped before any matching.",
+      "Description noise beating the name: descriptions are marketing copy that mentions every other form for contrast. Fix: name is authoritative; description-derived forms are used ONLY when the name yields nothing, and that fallback is flagged low-confidence (ambiguous=true).",
+      "Physically impossible combos: \"Bach Flower remedy\" became smokable (bare word \"flower\"), tinctures became smokable, gummies became vapeable. Fix: a coherence matrix removes combinations that cannot coexist in one product."
+    ]
+  },
+
+  "exclusive_precheck_order": [
+    "pet — NAME-first, then source category breadcrumb, then a STRONG description phrase only (loose 'safe for pets' cross-sell copy on human products must never match; warning sentences like 'keep out of reach of children and pets' are stripped before this check runs)",
+    "apparel — NAME or breadcrumb ONLY, never description (avoids 'free tee with purchase' cross-sell reclassifying a wellness product)"
+  ],
+
+  "form_word_lists": {
+    "edible_solid": ["gummy","gummies","capsule","capsules","softgel","softgels","soft gel","tablet","tablets","pill","pills","vati","chocolate","brownie","brownies","cookie","cookies","candy","candies","chew","chews","lozenge","lozenges","modak","ladoo","laddu","barfi","murabba"],
+    "edible": ["edible","edibles","bhang","infused honey","sweets"],
+    "topical": ["balm","cream","salve","ointment","lotion","gel","serum","topical","patch","roll-on","roll on","rub","spray","lip balm","body butter","massage","body oil","muscle oil","shampoo","conditioner","face wash","moisturizer","moisturiser","face oil","hair oil","hair serum","skin care","skincare"],
+    "smokable": ["pre-roll","preroll","pre roll","smoking blend","smoking mix","hashish","charas","dry herb","cannabis flower","hemp flower","cbd flower","infused flower","hash"],
+    "vapeable": ["vape","vapes","vaping","vaporizer","vaporiser","cartridge","cartridges","vape pen","vape kit","disposable vape","e-liquid","eliquid","e-juice","ejuice","vape juice","vape liquid","vape oil","distillate","shatter","dab","dabs","dabbing"],
+    "tincture": ["oil","oils","tincture","tinctures","drop","drops","sublingual","oral drops","oral spray"],
+    "beverage": ["tea","coffee","drink","drinks","beverage","juice","latte","smoothie","kombucha","thandai","drink mix"],
+    "extract": ["rso","rick simpson","feco","extract","extracts","extract paste","cannabis paste","raw extract","dewaxed","resin","hash oil","full extract cannabis oil","vijaya paste","syringe"]
+  },
+  "form_word_list_note": "All compiled as case-insensitive, word-boundary alternation (\\b(?:word1|word2|...)\\b), phrases matched literally. NEVER strings.Contains — \"joint\" was removed from the smokable list entirely because bare-substring matching caught \"joint pain\".",
+
+  "pet_words_name_level": ["pet","pets","dog","dogs","doggo","cat","cats","canine","feline","puppy","puppies","kitten","kittens","paw","paws","furry friend","for pets","for dogs","for cats","vet","vet-approved","veterinary"],
+  "pet_strong_description_phrase": "(?i)\\b(?:(?:made|formulated|designed|crafted|created|specially)\\s+(?:\\w+\\s+){0,3}?for\\s+(?:pets|dogs|cats|animals)|for\\s+your\\s+(?:pet|dog|cat)|vet[\\s-]?approved|veterinary|canine|feline|puppy|puppies|kitten|kittens)\\b",
+  "pet_warning_sentence_strip": "[^.!;]*(?:children\\s+and\\s+pets|pets\\s+and\\s+children|reach\\s+of\\s+(?:children|pets|animals)|away\\s+from\\s+(?:children|pets|animals)|(?:toxic|harmful|dangerous)\\s+to\\s+(?:pets|animals)|not\\s+(?:for|suitable\\s+for)\\s+(?:pets|animals))[^.!;]*",
+
+  "apparel_words": ["kurta","kurtas","t-shirt","tshirt","tee","tees","shirt","jeans","trouser","trousers","jacket","hoodie","sweatshirt","scarf","apparel","clothing","fabric","garment"],
+
+  "nutrition_words": ["protein","hemp seed","hemp seeds","hemp heart","hemp hearts","hemp flour","hemp bar","omega","granola","trail mix","hemp powder"],
+  "nutrition_gate": "form set is empty AND no cannabinoid word matches AND a nutrition word matches -> facet=nutrition",
+
+  "cannabinoid_context_words": ["cbd","thc","vijaya","cannabis extract","cannabinoid","cannabidiol","full spectrum","broad spectrum"],
+
+  "concentrate_markers": "(?i)not\\s+diluted\\s+with|undiluted|without\\s+(?:any\\s+)?carrier\\s*oil|no\\s+carrier\\s*oil|carrier[\\s-]?oil[\\s-]?free",
+  "concentrate_note": "A pure concentrate (\"not diluted with any carrier oil\", dab, distillate) is trusted as vapeable from the DESCRIPTION too — unlike other form signals it's a physical property, not marketing noise. Trusted only when the product isn't already edible_solid or topical.",
+
+  "negation_strip_pattern": "(?i)\\b(?:no need to|without|instead of|alternative to|not (?:for|meant for|intended for)|don'?t|do not|never|avoid)\\b[\\s\\w]{0,20}?\\b(?:smok|vap|inhal)\\w*(?:\\s*(?:,|or|and)\\s*(?:smok|vap|inhal)\\w*)*",
+  "negation_strip_pattern_2": "(?i)\\b(?:smoke|smoking|vape|vaping)[\\s-]free\\b",
+  "negation_note": "Both patterns are applied to name AND description BEFORE any form detection runs, not as a post-hoc filter.",
+
+  "coherence_matrix": {
+    "run_order": "topical FIRST (cosmetic names carry food-flavour words like 'Lip Balm — Chocolate' that would otherwise win as edible), then edible_solid, then tincture, then vapeable",
+    "if_topical_delete": ["edible_solid","edible","tincture","smokable","vapeable","beverage","extract"],
+    "if_edible_solid_delete": ["vapeable","smokable","tincture","beverage","topical","extract"],
+    "if_edible_solid_delete_note": "extract is deleted here too — a gummy is MADE WITH extract, but its consumption form is gummy, not extract.",
+    "if_tincture_delete": ["smokable"],
+    "if_vapeable_and_name_says_vape_delete": ["tincture"]
+  },
+
+  "raw_extract_auto_edible": "extract present AND none of {edible, edible_solid, vapeable, tincture, beverage} present -> also append 'edible' as a secondary (raw RSO/FECO with no other form is most commonly ingested orally).",
+
+  "form_priority_primary_selection": ["topical","vapeable","smokable","edible_solid","beverage","edible","tincture","extract","nutrition"],
+  "form_priority_note": "First matching form in this order after the coherence matrix runs becomes the PRIMARY category. edible_solid and edible both map to the public category name 'edible'.",
+
+  "exclusive": ["pet","apparel"],
+  "secondary_implications": { "extract": ["edible"] },
+  "precedence": "form over extract; name over description; pet/apparel checked before any form detection"
+}

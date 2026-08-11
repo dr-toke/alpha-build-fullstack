@@ -1,0 +1,15 @@
+{
+  "source": "cannabinoids_test.go:TestCannabinoidAttribution (\"hemp seed — no cannabinoids\") + categories_test.go (\"hemp protein\" is the closest form analogue)",
+  "raw": {
+    "title": "Cold Pressed Hemp Seed Oil 100ml",
+    "description": "Nutritious culinary oil, omega rich."
+  },
+  "expect": {
+    "cbd_mg": null,
+    "thc_mg": null,
+    "concentration_type": "hemp_seed",
+    "form": "nutrition",
+    "price_per_mg": null
+  },
+  "regression_note": "hemp_seed gate is NAME-FIRST: a product literally named 'Hemp Seed Oil' is seed oil, full stop — even if a description elsewhere name-drops CBD for comparison (see the separate 'NAMED hemp seed oil stays seed oil despite CBD mention in desc' case in the same test file, not duplicated here). This is a Constitution rule (00-CONSTITUTION.md §3, 03-DOMAIN-MODEL.md §3): concentration_type=hemp_seed means the API returns price_per_mg=NULL forever, never a computed number."
+}

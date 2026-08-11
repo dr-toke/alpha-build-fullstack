@@ -1,0 +1,14 @@
+{
+  "source": "cannabinoids_test.go:TestCannabinoidAttribution (\"'50% THC' must NOT read as '0% THC'\")",
+  "raw": {
+    "title": "Vijaya Extract - CBD THC Balanced -IPV4000 mg | 1:1 CBD:THC | Premium Dewaxed - 2000 mg - 5 ml",
+    "description": "Composition: Vijaya Extract 10000 mg of Strong Vijaya Extract 4000 mg of Cannabinoids 2000 mg Cannabidiol - CBD 2000 mg Tetrahydrocannabinol - THC Schedule E Drug 1:1 CBD:THC = 50% CBD : 50% THC Pure Extract - No carrier oil"
+  },
+  "expect": {
+    "cbd_mg": 2000,
+    "thc_mg": 2000,
+    "concentration_type": "total",
+    "profile": "balanced"
+  },
+  "regression_note": "The \\b before 0 in the thc_free regex is what this fixture locks: without it, the '50% THC' substring's trailing digit pattern falsely matched a thc-free marker and zeroed THC on this and similar 1:1 products across the catalogue. Also exercises: raw-herb weight (10000mg Vijaya Extract) correctly ignored in favour of the name-first + chemical-full-name (Cannabidiol/Tetrahydrocannabinol -> CBD/THC) totals."
+}

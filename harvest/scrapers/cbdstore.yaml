@@ -1,0 +1,89 @@
+# Harvested from dr-toke-init/apps/api/internal/catalog/scraper/{registry.go,shopify.go}
+# Extracted 2026-08-11. PoC SCOPE: this is the only store being wired up for
+# the first pass — see harvest/NOTES.md for the other 13, deferred, not lost.
+
+slug: cbdstore
+name: CBD Store India
+base_url: https://cbdstore.in
+platform: shopify              # public /products.json API, not CSS selectors
+trusted_aggregator: true       # auto-passes compliance.json's unknown_brand check
+role: aggregator                # multi-brand — brand resolved per-product via vendor_map, not a fixed brand_slug
+
+api:
+  listing: "https://cbdstore.in/products.json?limit=250&page={page}"
+  pagination: "increment page until a response returns fewer than 250 products, or an empty array"
+  detail_by_handle: "https://cbdstore.in/products/{handle}.json"   # used by ScrapeOne, not the full crawl
+  rate_limit_ms: "configured per-source at scrape time, not hardcoded in this file — see internal/config"
+
+fields_from_shopify_json:
+  name: "title (+ ' - ' + variant.title, when variant.title is set and isn't 'Default Title')"
+  brand: "vendor, resolved through vendor_map below; falls back to slugify(vendor) if unmapped (compliance then queues it as unknown_brand — correct behaviour, not a bug)"
+  price: "'₹' + variant.price  (string, ExtractPriceINR() in normaliser/extractor.go strips the ₹ and commas)"
+  description: "body_html, HTML-stripped (regex: '<[^>]+>' -> ' ', then collapse whitespace) + '\n\nTags: ' + comma-joined tags"
+  image: "images[0].src, empty string if no images"
+  category: "product_type (raw, passed through to ClassifyWithConfidence as the rawCategory hint)"
+  sku: "variant.sku"
+  in_stock: "variant.inventory_quantity > 0 OR variant.inventory_policy == 'continue'"
+
+vendor_map:
+  # Shopify vendor name (case-sensitive, tried first) -> our brand slug.
+  # Falls through to a lower-cased lookup, then to slugify(vendor) if still unmapped.
+  "BOHECO": "boheco"
+  "Boheco": "boheco"
+  "Cannazo India": "cannazo-india"
+  "Cure By Design": "cure-by-design"
+  "Indie Extracts": "indie-extracts"
+  "The Trost": "the-trost"
+  "Awshad": "awshad"
+  "Noigra": "noigra"
+  "Wholeleaf": "wholeleaf"
+  "Magiccann": "magiccann"
+  "Magiccann ": "magiccann"          # trailing-space variant seen in real vendor data — keep both keys
+  "Qurist": "qurist"
+  "MediCann": "medicann"
+  "Medicann": "medicann"
+  "Monks Hemp": "monks-hemp"
+  "Monk's Hemp": "monks-hemp"
+  "India Hemp Organics": "india-hemp-organics"
+  "Health Horizons": "health-horizons"
+  "Hemp Tribe": "hemp-tribe"
+  "Hempbuti": "hempbuti"
+  "Ananta Hemp Works": "ananta-hemp-works"
+
+quirks:
+  - "CRITICAL — one RawProduct is emitted PER VARIANT, not per product. Shopify lists
+     each size as a separate row sharing one product handle/URL; without a
+     per-variant source_url, every variant of a product upserts onto the same
+     (source_slug, source_url) row and the LAST one scraped wins — a 15ml/4500mg
+     listing ends up showing the 3ml/₹999 price. Fix already in the prior alpha:
+     source_url = https://cbdstore.in/products/{handle}?variant={variant_id} —
+     this is also Shopify's own canonical deep-link for that size, so it opens
+     the right variant for a buyer too. PORT THIS, do not simplify to one URL
+     per product."
+  - "Vendor name matching is two-tier: exact string match first (map has both
+     'Magiccann' and 'Magiccann ' with a trailing space — real scraped data had
+     both forms), then a lower-cased fallback lookup. Do not collapse this to a
+     single case-insensitive map without checking whether the trailing-space
+     variant is still present in live data."
+  - "A product with zero variants is skipped entirely (nil returned) — Shopify
+     occasionally returns draft/hidden products with an empty variants array."
+  - "Products where every variant's Name resolves empty are skipped."
+  - "Price string is prefixed '₹' + the raw Shopify decimal string — normalisation
+     (ExtractPriceINR) strips '₹' and ',' before parsing, so don't pre-format
+     the number here."
+  - "HTML description is stripped with a blunt '<[^>]+>' -> space regex, not a
+     real HTML parser — fine for Shopify's fairly clean body_html, revisit if a
+     new Shopify store's body_html turns out to have script/style tags that
+     leak text through."
+
+http:
+  user_agent: "configured per-scrape-run, shared across all sources"
+  timeout: "30s (Go http.Client{Timeout: 30 * time.Second})"
+  headers: { "Accept": "application/json" }
+
+notes: "cbdstore.in is a multi-brand aggregator on the same generic Shopify
+  adapter used by boheco.com, indieextracts.com, thetrost.com, etc. (see
+  harvest/NOTES.md DEFERRED STORES section) — no cbdstore-specific code exists
+  beyond this config; the adapter (internal/catalog/scraper/shopify.go) is
+  fully generic. Porting the Shopify adapter once covers cbdstore now and
+  6 more direct-brand stores + 2 more aggregators later for free."

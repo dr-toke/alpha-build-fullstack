@@ -1,0 +1,14 @@
+{
+  "source": "categories_test.go:TestRealFailures (\"cannex concentrate\")",
+  "raw": {
+    "title": "Cannavedic - CannEx Strong Plus THC+CBD Extract (10:1 THC:CBD) 1000mg | 1ml",
+    "description": "pure cannabinoids and Terpenes and is not diluted with any carrier oil for a smooth experience"
+  },
+  "expect": {
+    "form": "concentrate",
+    "route": "inhaled",
+    "primary_category_legacy": "vapeable",
+    "forbid_categories_legacy": ["tincture", "smokable"]
+  },
+  "regression_note": "The concentrate_markers pattern ('not diluted with any carrier oil') is trusted from the DESCRIPTION even though form detection is otherwise name-first — this is a deliberate exception (categories.json: concentrate_note) because it's a physical-property signal, not marketing noise. Without it this product would fall through to no-form-detected ('other') since the NAME alone has no vape/smoke keyword."
+}

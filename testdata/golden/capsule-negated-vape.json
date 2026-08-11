@@ -1,0 +1,14 @@
+{
+  "source": "categories_test.go:TestRealFailures (\"capsule w/ negated vape copy\")",
+  "raw": {
+    "title": "CannaMed Cannabis Capsules 100mg (10 Capsules)",
+    "description": "Convenient and Discreet - No need to smoke or vape; take the capsule with water for an easy experience"
+  },
+  "expect": {
+    "form": "capsule",
+    "route": "oral",
+    "primary_category_legacy": "edible",
+    "forbid_categories_legacy": ["vapeable", "smokable", "tincture"]
+  },
+  "regression_note": "THE canonical false-positive case that motivated the entire facet refactor (01-ARCHITECTURE.md §4, ADR-002). 'No need to smoke or vape' must not make a capsule vapeable/smokable. Fixed by stripping negation windows (negation_strip_pattern in categories.json) BEFORE any form-word matching runs, not by filtering matches after the fact."
+}

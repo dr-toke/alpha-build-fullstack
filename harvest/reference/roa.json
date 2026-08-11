@@ -1,0 +1,39 @@
+{
+  "_meta": {
+    "source": "dr-toke-init/apps/api/internal/db/migrations/026_reference_content.sql (INSERT INTO roa_methods)",
+    "extracted_at": "2026-08-11"
+  },
+  "methods": [
+    { "slug": "smoking-vaping", "method": "Smoking / Vaping", "onset": "1–5 min", "duration": "1–3 hrs", "bioavailability": "~30%",
+      "pros": ["Fastest onset of any method","Real-time dose titration","Immediate relief assessment"],
+      "cons": ["Lung irritation over time","Short duration requires redosing","Social stigma in India","Smell"],
+      "best_for": ["Acute pain episodes","Experienced users","Situations needing rapid onset"],
+      "warning_note": "Combustion creates byproducts. Vaping is lower harm than smoking but not zero harm.",
+      "display_order": 10 },
+    { "slug": "edibles-capsules", "method": "Edibles / Capsules", "onset": "30–120 min", "duration": "4–8 hrs", "bioavailability": "~6–20%",
+      "pros": ["Longest duration of any method","Discreet, no smell","No lung involvement","Precise dosing with capsules"],
+      "cons": ["Very slow onset — #1 cause of accidental overconsumption","Variable absorption affected by food intake","Liver-processed, producing 11-OH-THC (stronger effect)","Hard to reverse if too much taken"],
+      "best_for": ["Chronic pain management","Sleep disorders","Long-duration sustained relief","Daytime microdosing"],
+      "warning_note": "GOLDEN RULE: Start at 2.5–5mg. Wait 2 full hours before considering more. Never double-dose because 'nothing happened'.",
+      "display_order": 20 },
+    { "slug": "sublingual-oil", "method": "Sublingual Oil / Tincture", "onset": "15–45 min", "duration": "2–6 hrs", "bioavailability": "~20–35%",
+      "pros": ["Faster than edibles","Drop-by-drop dose control","No combustion","Consistent absorption"],
+      "cons": ["Taste can be unpleasant (carrier oil dependent)","Requires 60–90 seconds held under tongue","Dose adjustment takes 30+ minutes to assess"],
+      "best_for": ["Daily wellness regimen","Anxiety management","Pain management","Clinical use with physician oversight"],
+      "warning_note": null,
+      "display_order": 30 },
+    { "slug": "topical", "method": "Topical (Balm / Cream)", "onset": "15–60 min", "duration": "2–4 hrs", "bioavailability": "Local only",
+      "pros": ["Zero psychoactive effect","Targeted local relief","Completely beginner-safe","No systemic risk"],
+      "cons": ["Does not enter bloodstream","Limited to application site only","Ineffective for systemic conditions"],
+      "best_for": ["Joint and muscle pain","Post-workout recovery","Skin conditions","Arthritis","Anyone wanting zero psychoactivity"],
+      "warning_note": null,
+      "display_order": 40 },
+    { "slug": "beverages", "method": "Beverages (Bhang / Thandai)", "onset": "45–120 min", "duration": "4–10 hrs", "bioavailability": "~6–20%",
+      "pros": ["Deeply embedded in Indian cultural tradition","Social consumption context","Accessible at legal government shops","Often fat-infused (higher absorption)"],
+      "cons": ["Hardest to dose accurately of all methods","Potency varies wildly between vendors and batches","Festival context encourages overconsumption","Very long duration can catch people off-guard"],
+      "best_for": ["Cultural and festival context","Experienced users in social settings"],
+      "warning_note": "Half a glass maximum for beginners. Bhang potency varies enormously — government shop bhang is typically weaker than private preparations. Always eat beforehand.",
+      "display_order": 50 }
+  ],
+  "note": "This is the 'edibles delay golden-rule callout' and 'bhang thandai festival dosing warning' that 03-DOMAIN-MODEL.md §7 says are content fields, not hardcoded frontend strings — confirmed, they're already DB rows here, not frontend TS."
+}

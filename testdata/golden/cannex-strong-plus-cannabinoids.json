@@ -1,0 +1,15 @@
+{
+  "source": "cannabinoids_test.go:TestCannabinoidAttribution (\"explicit both, label-first (CannEx)\")",
+  "raw": {
+    "title": "Cannavedic - CannEx Strong Plus THC+CBD Extract (10:1 THC:CBD) 1000mg | 1ml",
+    "description": "THC-dominant formulation. Cannabinoids THC 909mg CBD 91mg. THC:CBD ratio of 10:1."
+  },
+  "expect": {
+    "cbd_mg": 91,
+    "thc_mg": 909,
+    "concentration_type": "thc",
+    "profile": "thc_dominant"
+  },
+  "regression_note": "11-HARVEST.md's canonical test product. This exercises: explicit both-cannabinoid label-first extraction, ratio-with-total cross-check (10:1 matches the 909/91 split), and the 3x dominant-basis threshold in finalize(). This is the cannabinoid-math half of the canonical fixture — see cannex-strong-plus-category.json for the form/route half, which uses a different (real, longer) description because categories_test.go and cannabinoids_test.go exercise the same product name with different truncated description snippets.",
+  "unverified": "04-PIPELINE.md and 11-HARVEST.md both state this product should carry review_reason=terminology_review. Neither test file's description contains a word from compliance.json's terminology_review list (marijuana/ganja/charas/weed/psychoactive/get high/stoned/recreational high) — the real scraped product description that triggers this almost certainly exists but wasn't captured in either _test.go file. Needs re-verification against a live scrape before this fixture can assert review_reason."
+}

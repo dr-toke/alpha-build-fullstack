@@ -1,0 +1,14 @@
+{
+  "source": "cannabinoids_test.go:TestCannabinoidAttribution (\"balanced 1:1 bare ratio splits (Cannabryl ground truth)\" + \"'Nmg of CBD' wording + per-drop distractors\")",
+  "raw": {
+    "title": "Cannabryl - 4000 mg - 1:1 - Premium",
+    "description": "The 1:1 ratio of CBD and THC is all set to deliver amazing health effects."
+  },
+  "expect": {
+    "cbd_mg": 2000,
+    "thc_mg": 2000,
+    "concentration_type": "total",
+    "profile": "balanced"
+  },
+  "regression_note": "An EQUAL bare ratio (1:1) needs no dominant-cannabinoid orientation at all — splits 50/50 whenever both cannabinoids are textually 'in play'. This is the fix for '4000mg 1:1 listed as CBD-only' — before the equal-ratio special case, an unoriented bare ratio with no determinable dominant fell through to a single-cannabinoid guess. cannabryl.com is a custom-platform scraper (all its products are prescription-required/THC-dominant per harvest/scrapers' deferred-store notes) so this exact product is a real, still-relevant catalogue case even though its store scraper is deferred past the PoC."
+}

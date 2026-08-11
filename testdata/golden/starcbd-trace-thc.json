@@ -1,0 +1,14 @@
+{
+  "source": "cannabinoids_test.go:TestCannabinoidAttribution (\"CBD product with trace-THC disclaimer must stay CBD\")",
+  "raw": {
+    "title": "StarCBD - CBD Oil Pain Relief - 750mg/30ml",
+    "description": "Pure CBD goodness. Contains less than 0.3% THC as permitted by law."
+  },
+  "expect": {
+    "cbd_mg": 750,
+    "thc_mg": 0,
+    "concentration_type": "cbd",
+    "profile": "cbd_dominant"
+  },
+  "regression_note": "The <0.3% THC legal-compliance disclaimer (trace_thc pattern) must NOT be attributed as dosed THC content — a 'less than 0.3% THC' CBD oil is 750mg of CBD, not a mystery total. This is distinct from the thc_free case (starcbd doesn't say '0% THC' or 'THC-free', it says trace amount is present but below the legal threshold)."
+}

@@ -1,0 +1,47 @@
+{
+  "_meta": {
+    "source": "dr-toke-init/apps/api/internal/catalog/normaliser/cannabinoids.go",
+    "extracted_at": "2026-08-11",
+    "warning": "This file captures the LITERAL regexes and marker lists verbatim. It does NOT capture the control flow — ExtractCannabinoids() is genuinely procedural (ordered branches, ratio orientation, per-serving-to-pack reconciliation, name-first identity resolution), not a flat priority-match loop. Port the algorithm as Go code in internal/resolve/cannabinoids.go, using these patterns as the named, loaded-from-JSON source of truth for each regex — do not re-derive the regexes from memory, and do not flatten the control flow into a data-driven list it was never shaped as. See harvest/NOTES.md for the full explanation.",
+    "canonical_test_product": "Cannavedic - CannEx Strong Plus THC+CBD Extract (10:1 THC:CBD) 1000mg | 1ml -> thc_mg=909, cbd_mg=91, THC-dominant"
+  },
+
+  "patterns": {
+    "cbd_label_first":        "(?i)CBD[\\s:_-]*(\\d+(?:\\.\\d+)?)\\s*mg",
+    "cbd_num_first":          "(?i)(\\d+(?:\\.\\d+)?)\\s*mg\\s*(?:of\\s+)?(?:the\\s+)?(?:pure\\s+)?[\\s_-]*CBD",
+    "thc_label_first":        "(?i)THC[\\s:_-]*(\\d+(?:\\.\\d+)?)\\s*mg",
+    "thc_num_first":          "(?i)(\\d+(?:\\.\\d+)?)\\s*mg\\s*(?:of\\s+)?(?:the\\s+)?(?:pure\\s+)?[\\s_-]*THC",
+    "pct_cbd":                "(?i)(\\d+(?:\\.\\d+)?)\\s*%\\s*CBD",
+    "pct_thc":                "(?i)(\\d+(?:\\.\\d+)?)\\s*%\\s*THC",
+    "volume_ml":              "(?i)(\\d+(?:\\.\\d+)?)\\s*ml",
+    "weight_g":                "(?i)(\\d+(?:\\.\\d+)?)\\s*(?:g|gm|gms|gram|grams)\\b",
+    "generic_mg":             "(?i)(\\d+(?:\\.\\d+)?)\\s*mg",
+    "hemp_seed":              "(?i)hemp\\s*seed\\s*oil|hemp\\s*seed|hemp\\s*heart|hemp\\s*protein|hemp\\s*flour|hemp\\s*oil",
+    "ratio_num_first":        "(?i)(\\d+(?:\\.\\d+)?)\\s*:\\s*(\\d+(?:\\.\\d+)?)[\\s|()/,-]*(?:ratio\\s*)?(thc\\s*:\\s*cbd|cbd\\s*:\\s*thc)",
+    "ratio_label_first":      "(?i)(thc\\s*:\\s*cbd|cbd\\s*:\\s*thc)[\\s|()/,-]*(?:ratio\\s*)?(?:of\\s*)?(\\d+(?:\\.\\d+)?)\\s*:\\s*(\\d+(?:\\.\\d+)?)",
+    "thc_dominant_wording":   "(?i)thc[\\s-]*dominant|dominant\\s*thc|high[\\s-]*thc|thc[\\s-]*rich|thc[\\s-]*tolerance|thc[\\s-]*heavy",
+    "ratio_bare":             "(\\d{1,2}(?:\\.\\d+)?)\\s*:\\s*(\\d{1,2}(?:\\.\\d+)?)",
+    "chem_name_cannabidiol":  "(?i)cannabidiol",
+    "chem_name_thc":          "(?i)tetrahydrocannabinol",
+    "thc_free":               "(?i)thc[\\s-]*free|\\b0(?:\\.0+)?\\s*%?\\s*thc\\b|zero\\s*thc|\\bno\\s+thc\\b|thc[\\s-]*less",
+    "trace_thc":              "(?i)(?:less\\s+than|under|below|<)\\s*0?\\.3\\s*%|trace(?:s|\\s+amounts?)?\\s+of\\s+thc|thc\\s+in\\s+trace|non[\\s-]?psychoactive",
+    "cannabinoid_pair":       "(?i)\\b(?:cbd\\s*[+&/]\\s*thc|thc\\s*[+&/]\\s*cbd)\\b"
+  },
+
+  "notes": {
+    "cbd_label_first_vs_num_first": "Label-first (\"CBD 91mg\") is preferred over number-first (\"91mg CBD\") — in lists like \"THC 909mg CBD 91mg\" each number belongs to the cannabinoid it FOLLOWS. Number-first tolerates \"of/the/pure\" (\"500mg of CBD\"). All matches are scanned and the MAX taken: per-serving figures (\"2.1mg of CBD per drop\") are always smaller than the pack-level figure in the same text.",
+    "nul_before_zero_in_thc_free": "The \\b before 0 in thc_free is load-bearing: without it, \"5(0% THC)\" inside \"50% THC\" matched, marking half the balanced catalogue THC-free. Never simplify this regex.",
+    "trace_thc_is_not_dosed": "trace_thc (\"<0.3% THC\", \"non-psychoactive\") means THC is a legal-compliance disclaimer, not a dosed cannabinoid — a \"CBD Oil 2000mg ... contains <0.3% THC\" is 2000mg of CBD, not 2000mg of mystery total.",
+    "cannabinoid_pair_scrub": "A number adjacent to \"CBD + THC\" / \"THC/CBD\" (the pair, not a ratio) is combined content — scrub the pair text before per-cannabinoid extraction so it can't be misattributed to one side. ':' is deliberately excluded from the separator class — \"THC:CBD 10:1\" is a ratio, not a pair mention.",
+    "percentages_are_full_decimals": "0.3% THC is a valid small value, not zero — this was a shipped bug (see thc_free note).",
+    "gram_isolates": "Isolates are sold by grams (\"100% CBD - 5gm\" = 5000mg) — pct_cbd/pct_thc compute against a volume_ml base first, falling back to weight_g (1g ~= 1000mg) when no ml volume exists.",
+    "per_serving_reconciliation": "Explicit per-cannabinoid figures far below the pack-level name total ((cbd+thc)*5 <= total) are scaled up preserving their ratio — \"1000mg pack, 2.1+2.1mg per drop\" becomes 500/500, not 2.1/2.1.",
+    "name_first_identity": "The headline total mg is resolved NAME-FIRST — descriptions carry raw-herb weights (\"10000mg of Strong Vijaya Extract\") and pack-variant figures that are NOT this product's cannabinoid content.",
+    "equal_bare_ratio_needs_no_orientation": "A bare ratio (\"1:1\", \"(10:1)\") that is EQUAL splits 50/50 whenever both cannabinoids are textually in play, with no dominant-cannabinoid determination needed. An UNEQUAL bare ratio needs a determinable dominant (from thc_dominant_wording or name-first identity) before it can be oriented.",
+    "unoriented_ratio_stays_honest_total": "An unequal bare ratio with no determinable dominant (\"THC+CBD (2:1)\", direction unstated) must NOT be guessed at — it stays concentration_type=total rather than assuming an orientation that could contradict the label.",
+    "balanced_pair_no_split_assumption": "An explicit \"CBD + THC\" pair with NO printed ratio and no determinable dominant is assumed market-standard balanced 1:1 — the neutral/maximum-entropy estimate for Indian full-spectrum products sold without a printed split. This gives both cbd_price_per_mg and thc_price_per_mg with bounded error instead of an unusable total-only bucket. Guarded: skipped if an unoriented bare ratio is present (would contradict a printed but undirected split).",
+    "dominant_basis_finalize_threshold": "In finalize(), a cannabinoid >= 3x the other makes the product cbd- or thc-dominant (concentration_type = that basis, but BOTH cbd_mg and thc_mg are still captured, never zeroed). Below 3x, concentration_type = total."
+  },
+
+  "hemp_seed_gate": "A product is hemp_seed (cannabinoids all zero, PriceInr/mg = NULL forever) when hemp_seed pattern matches AND the text does not also mention 'cbd' or 'vijaya'. This is checked NAME-FIRST (a product literally named \"Hemp Seed Oil\" is seed oil full stop, even if the description name-drops CBD for comparison) and again as a description-level fallback."
+}

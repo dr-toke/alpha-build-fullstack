@@ -1,0 +1,13 @@
+{
+  "source": "categories_test.go:TestRealFailures (\"bach flower remedy\")",
+  "raw": {
+    "title": "Vior Naturals - Cherry Plum | Bach Flower Stock Concentrate - 10ml",
+    "description": "Fear of the mind being over-strained, of reason giving way. Bach Flower Cherry Plum"
+  },
+  "expect": {
+    "form": "other",
+    "ambiguous": true,
+    "forbid_categories_legacy": ["smokable"]
+  },
+  "regression_note": "Bare 'flower' used to match the smokable word list and misclassified Bach flower remedies (a completely unrelated herbal product category) as smokable cannabis. Fixed by requiring a cannabis qualifier before 'flower' counts (smokable list uses 'cannabis flower'/'hemp flower'/'cbd flower'/'infused flower', never bare 'flower'). This product correctly resolves to no form signal at all -> 'other', ambiguous=true, routed to category_uncertain review — not silently mis-tagged."
+}

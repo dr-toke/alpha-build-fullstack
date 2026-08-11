@@ -1,0 +1,50 @@
+{
+  "_meta": {
+    "source": "dr-toke-init/apps/api/internal/catalog/compliance/filter.go",
+    "extracted_at": "2026-08-11",
+    "warning": "internal/catalog/compliance has NO _test.go file in the prior alpha — zero automated test coverage carried over. testdata/golden fixtures for this package need to be authored fresh during M2, not harvested; see harvest/NOTES.md."
+  },
+
+  "hard_block": {
+    "pattern": "(?i)\\b(?:cures?\\s+(?:cancer|diabetes|covid|hiv|aids|tumou?rs?)|reverses?\\s+(?:cancer|diabetes|disease|ageing|aging)|guaranteed\\s+high|get\\s+you\\s+high|cure[- ]all|miracle\\s+cure)\\b",
+    "examples": ["cures cancer","cures diabetes","cures covid","cures hiv","cures aids","cures tumor/tumour","reverses cancer","reverses diabetes","reverses disease","reverses ageing/aging","guaranteed high","get you high","cure-all / cure all","miracle cure"],
+    "action": "hidden (Pass=false), reason=compliance_uncertain, detail='prohibited claim: <matched text>'"
+  },
+
+  "terminology_review": {
+    "pattern": "(?i)\\b(?:marijuana|ganja|charas|weed|psychoactive|get\\s+high|stoned|recreational\\s+high)\\b",
+    "examples": ["marijuana","ganja","charas","weed","psychoactive","get high","stoned","recreational high"],
+    "action": "stays VISIBLE, queued for review, reason=terminology_review, detail='review terminology: <matched text>'",
+    "why": "ADR-008 / 04-PIPELINE.md §5 — hard-blocking a product for containing the word 'marijuana' is wrong for a cannabis-education catalogue. This exact bug hid CannEx Strong Plus in the prior alpha."
+  },
+
+  "service_listing": {
+    "pattern": "(?i)\\b(?:retreats?|workshops?|consultations?|masterclass(?:es)?|webinars?|immersions?|yoga\\s+(?:class(?:es)?|session|flow)|meditation\\s+(?:class(?:es)?|flow|session|teacher)|online\\s+class(?:es)?|day\\s+retreat|booking|art\\s+relaxation|diet\\s+consultation|coaching\\s+session|teacher\\s+training|training\\s+course|course\\s+fees?|festival|tickets?|sound\\s+healing|handpan|hand\\s+drum|instrument|dummy\\s+product)\\b",
+    "matched_against": "product NAME only ('class' alone deliberately excluded — matches 'world-class')",
+    "action": "hidden (Pass=false), reason=compliance_uncertain, detail='service/event listing, not a product: <matched text>'",
+    "why": "Marketplace aggregators list events/services (retreats, workshops) alongside real products in their 'experiences' sections — a ₹4-lakh retreat must never appear in a product catalogue."
+  },
+
+  "price_anomaly": {
+    "low_threshold_inr_per_mg": 0.10,
+    "high_threshold_inr_per_mg": 100,
+    "action": "queued for review, reason=price_anomaly, only checked when priceINR > 0 AND pricePMG > 0",
+    "note": "04-PIPELINE.md §5 documents this same 0.10/100 band; ADR-016 replaces the one-time-freeze tuning plan for these numbers with an ongoing AI-assisted, human-approved process."
+  },
+
+  "unknown_brand": {
+    "action": "queued for review, reason=unknown_brand, when brandSlug is empty OR not in the approved-brands allowlist",
+    "trusted_aggregators_auto_pass": ["itshemp", "cbdstore", "cannameds"],
+    "trusted_aggregators_note": "These three slugs auto-pass the brand check even when the specific brand isn't yet in our DB (09-OPS.md §6 confirms the same three, with cbdstore.in = 'CBD Store India')."
+  },
+
+  "check_order": [
+    "1. unknown_brand (brand not in approved list)",
+    "2. service_listing (name only)",
+    "3. hard_block (name+description)",
+    "4. terminology_review (name+description)",
+    "5. price_anomaly (only if priceINR>0 and pricePMG>0)",
+    "else: pass"
+  ],
+  "matching": "word_boundary throughout, never substring — confirmed no strings.Contains anywhere in filter.go"
+}

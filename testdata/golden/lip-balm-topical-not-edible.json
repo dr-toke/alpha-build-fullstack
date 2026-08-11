@@ -1,0 +1,13 @@
+{
+  "source": "categories_test.go:TestRealFailures (\"flavoured lip balm is topical, not edible\")",
+  "raw": {
+    "title": "Indus Hemp: Lip Balm - Chocolate 5G",
+    "description": "Nourishing chocolate flavoured lip balm with hemp oil."
+  },
+  "expect": {
+    "form": "topical",
+    "route": "topical",
+    "forbid_categories_legacy": ["edible"]
+  },
+  "regression_note": "'Chocolate' is in the edible_solid word list, and cosmetic products routinely carry food-flavour names ('Lip Balm — Chocolate', 'Cocoa & Coffee Body Butter'). The coherence matrix runs topical's exclusion FIRST, before edible_solid's, specifically so a flavour name never outranks an explicit cosmetic-application word (balm/cream/lotion/etc.). Order matters here — reversing it would let 'chocolate' win."
+}
