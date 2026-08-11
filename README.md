@@ -1,12 +1,21 @@
-# Dr Toke — Backend
+# Dr Toke
 
 India's consumer guide to the legal cannabis economy.
 **Not a dispensary. Not a brand. PC Mag for Vijaya.**
 
-This repository is the **Go API, data pipeline, admin plane, and CMS**. The
-frontend is a separate repository (`dr-toke/skeleton`, SvelteKit, deployed at
-`toke-v02.netlify.app`) and is **already designed and built**. This backend is
-built *around* it, not the other way round.
+**Monorepo** (`docs/10-DECISIONS.md#adr-018`):
+
+- `apps/api/` — the **Go API, data pipeline, admin plane, and CMS**.
+- `apps/web/` — the **SvelteKit 5 + Tailwind 4 frontend**, deployed at
+  `toke-v02.netlify.app`. Brought in **as-is** from its original standalone
+  repo (`dr-toke/skeleton`) and **already designed and built** — this is not
+  ours to restyle casually just because it now lives in the same repo as the
+  backend. The backend is built *around* it, not the other way round.
+
+One repo, two independently-buildable apps meeting only at HTTP/JSON and
+generated types (`00-CONSTITUTION.md §5`). See `apps/web/README.md` for
+frontend-specific dev commands (`pnpm dev`, `pnpm check`, etc.) — they're
+unchanged by the move into this repo.
 
 ---
 
@@ -27,8 +36,8 @@ built *around* it, not the other way round.
 | 10 | [`docs/10-DECISIONS.md`](docs/10-DECISIONS.md) | "Why is it like this?" / "Can I change X?" |
 | 11 | [`docs/11-HARVEST.md`](docs/11-HARVEST.md) | **Before deleting the old repo.** Knowledge extraction checklist. |
 
-`SYMBOLS.md` is a running ledger of exported Go signatures. Append after every
-merged file; it is the paste-source for build orders.
+`apps/api/SYMBOLS.md` is a running ledger of exported Go signatures. Append
+after every merged file; it is the paste-source for build orders.
 
 ---
 
@@ -62,10 +71,17 @@ See [`docs/10-DECISIONS.md#adr-001`](docs/10-DECISIONS.md).
 ## Quickstart
 
 ```bash
-docker compose up -d            # Postgres + MinIO
+docker compose up -d                                   # Postgres + MinIO
+cd apps/api
 goose -dir internal/db/migrations postgres "$DATABASE_URL" up
-go run ./cmd/server             # API on :8080
-go run ./cmd/worker             # River job runner
+go run ./cmd/server              # API on :8080
+go run ./cmd/worker              # River job runner
+```
+
+```bash
+cd apps/web
+pnpm install
+VITE_API_URL=http://localhost:8080 pnpm dev             # frontend on :5173
 ```
 
 Full detail in [`docs/09-OPS.md`](docs/09-OPS.md).

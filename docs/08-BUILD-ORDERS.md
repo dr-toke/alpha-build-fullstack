@@ -9,6 +9,11 @@
 >
 > **Prerequisite: `11-HARVEST.md` is complete.** Do not start M1 until every box
 > in its §3 is ticked.
+>
+> **All file paths below are relative to `apps/api/`** (`ADR-018` — this repo
+> is now a monorepo with the Go backend at `apps/api/` rather than the repo
+> root). `go.mod`, `internal/`, `cmd/`, `harvest/`, `testdata/` all nest under
+> there.
 
 ---
 

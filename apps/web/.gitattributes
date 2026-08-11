@@ -1,0 +1,16 @@
+# Normalise line endings on checkin; check out native.
+* text=auto eol=lf
+
+# Binary assets — never munge, never diff as text.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.otf  binary
+*.ttf  binary
+*.woff  binary
+*.woff2 binary
+
+# Lockfile: generated. Collapse it in diffs and reviews.
+pnpm-lock.yaml -diff linguist-generated

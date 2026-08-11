@@ -1,0 +1,353 @@
+@import "tailwindcss";
+
+/* ════════════════════════════════════════════════════════════════════════
+   FONTS
+   Brand faces: drop the licensed files into static/fonts/ as
+   StarCrush.woff2 / Pixelta.woff2 (or .ttf) and they take over automatically.
+   Until then the stacks fall back to bundled open-license pixel fonts
+   (Pixelify Sans, VT323 — OFL, self-hosted, zero external requests).
+   ════════════════════════════════════════════════════════════════════════ */
+@font-face {
+	font-family: 'Cyberwave 2000';
+	src: url('/fonts/cyberwave-2000.otf') format('opentype');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Star Crush';
+	src: url('/fonts/StarCrush.otf') format('opentype');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Pixelta';
+	src: url('/fonts/Pixelta.ttf') format('truetype');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Ubuntu Sans';
+	font-weight: 400;
+	src: url('/fonts/ubuntu-sans-400.woff2') format('woff2');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Ubuntu Sans';
+	font-weight: 500;
+	src: url('/fonts/ubuntu-sans-500.woff2') format('woff2');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Ubuntu Sans';
+	font-weight: 700;
+	src: url('/fonts/ubuntu-sans-700.woff2') format('woff2');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Pixelify Sans';
+	font-weight: 400;
+	src: url('/fonts/pixelify-sans-400.woff2') format('woff2');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Pixelify Sans';
+	font-weight: 700;
+	src: url('/fonts/pixelify-sans-700.woff2') format('woff2');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'VT323';
+	font-weight: 400;
+	src: url('/fonts/vt323-400.woff2') format('woff2');
+	font-display: swap;
+}
+
+/* Catalog-tier faces — the exact fonts the dr-toke catalog pages use. */
+@font-face {
+	font-family: 'Cormorant Garamond';
+	font-weight: 400;
+	src: url('/fonts/cormorant-garamond-400.woff2') format('woff2');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Cormorant Garamond';
+	font-weight: 600;
+	src: url('/fonts/cormorant-garamond-600.woff2') format('woff2');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'Cormorant Garamond';
+	font-weight: 700;
+	src: url('/fonts/cormorant-garamond-700.woff2') format('woff2');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'DM Sans';
+	font-weight: 400;
+	src: url('/fonts/dm-sans-400.woff2') format('woff2');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'DM Sans';
+	font-weight: 500;
+	src: url('/fonts/dm-sans-500.woff2') format('woff2');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'DM Sans';
+	font-weight: 600;
+	src: url('/fonts/dm-sans-600.woff2') format('woff2');
+	font-display: swap;
+}
+@font-face {
+	font-family: 'DM Sans';
+	font-weight: 700;
+	src: url('/fonts/dm-sans-700.woff2') format('woff2');
+	font-display: swap;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   TAILWIND THEME — dr-toke catalog tokens.
+   DO NOT TOUCH: /products, /product and /compare are an exact copy of
+   apps/web in ../dr-toke and their utility classes resolve against these.
+   ════════════════════════════════════════════════════════════════════════ */
+@theme {
+	--color-bg:     #080f08;
+	--color-bg2:    #0c1a0d;
+	--color-bg3:    #132015;
+	--color-bg4:    #1a2e1c;
+	--color-gold:   #c8a84b;
+	--color-gold2:  #e0c878;
+	--color-gold3:  #a07828;
+	--color-green:  #3a7a2f;
+	--color-green2: #5aaa4a;
+	--color-green3: #2a5a20;
+	--color-cream:  #ede4d0;
+	--color-cream2: #b0a080;
+	--color-red2:   #e07a5a;
+
+	--font-display: 'Cormorant Garamond', serif;
+	--font-body:    'DM Sans', sans-serif;
+}
+
+:root {
+	/* dr-toke catalog vars — used by inline style="" in the ported components. */
+	--bg:     #080f08;
+	--bg2:    #0c1a0d;
+	--bg3:    #132015;
+	--bg4:    #1a2e1c;
+	--gold:   #c8a84b;
+	--gold2:  #e0c878;
+	--gold3:  #a07828;
+	--green:  #3a7a2f;
+	--green2: #5aaa4a;
+	--green3: #2a5a20;
+	--cream:  #ede4d0;
+	--cream2: #b0a080;
+	--red2:   #e07a5a;
+	--font-display: 'Cormorant Garamond';
+	--font-body:    'DM Sans';
+
+	/* New-site pixel theme (home / history / science / legality). */
+	--paper: #fde3e3;
+	--ink:   #a946d0;
+	--mute:  #6f6f6f;
+	--line:  #e5e5e5;
+	--leaf:  #3a7a2f;
+
+	/* Mood-board palette — baby pink bg, purple/green accents. Keep new accent
+	   colors restricted to this set. */
+	--mood-purple:      #d477ff;
+	--mood-purple-deep: #a946d0;
+	--mood-green:       #51ad85;
+	--mood-green-neon:  #65cdaf;
+	--mood-rose:        #da437b;
+	--mood-peach:       #f99a67;
+	/* ── Aqua gloss — retro-Apple surfaces, used by the front page.
+	   A convex face: lit upper half, a crease at the midline, shaded lower
+	   half, kept faint enough to read as a sheen rather than a gel button.
+	   Shade tints are pulled toward --ink so the gloss belongs to this palette.
+	   (Prefixed --aqua-* to stay clear of the catalog tier's vars.) ── */
+	--aqua-face: linear-gradient(
+		to bottom,
+		rgba(255, 255, 255, 0.78) 0%,
+		rgba(255, 255, 255, 0.34) 48%,
+		rgba(120, 60, 140, 0.05) 52%,
+		rgba(120, 60, 140, 0.15) 100%
+	);
+	/* the version that survives on top of a saturated fill */
+	--aqua-face-accent: linear-gradient(
+		to bottom,
+		rgba(255, 255, 255, 0.5) 0%,
+		rgba(255, 255, 255, 0.18) 48%,
+		rgba(0, 0, 0, 0.05) 52%,
+		rgba(0, 0, 0, 0.2) 100%
+	);
+	/* tight contact shadow + wider soft one: surfaces sit ON the page */
+	--aqua-drop:       0 1px 2px rgba(120, 60, 140, 0.13), 0 3px 8px rgba(120, 60, 140, 0.10);
+	--aqua-drop-hover: 0 2px 4px rgba(120, 60, 140, 0.17), 0 6px 14px rgba(120, 60, 140, 0.14);
+	/* the gloss itself: crisp lit top edge, light bleeding down, soft bottom shade */
+	--aqua-shine:
+		inset 0 1px 0 rgba(255, 255, 255, 0.95),
+		inset 0 6px 9px -6px rgba(255, 255, 255, 0.75),
+		inset 0 -5px 8px -7px rgba(120, 60, 140, 0.22);
+	--aqua-shine-hover:
+		inset 0 1px 0 rgba(255, 255, 255, 0.95),
+		inset 0 7px 10px -6px rgba(255, 255, 255, 0.8),
+		inset 0 -6px 9px -7px rgba(120, 60, 140, 0.22);
+	/* the recessed track a sunken panel sits in */
+	--aqua-well: inset 0 2px 4px rgba(120, 60, 140, 0.2), inset 0 -1px 0 rgba(255, 255, 255, 0.5);
+	/* card face, and the hairline pinstripes of early OS X */
+	--aqua-card: linear-gradient(to bottom, #fffafb 0%, #fdeef0 100%);
+	--aqua-pinstripe: repeating-linear-gradient(
+		to bottom,
+		rgba(255, 255, 255, 0.5) 0 1px,
+		rgba(255, 255, 255, 0) 1px 4px
+	);
+
+	/* ── Wii chrome — a white lacquered face: bright top half, a crease at the
+	   midline, silver below. Ringed in a section colour instead of Nintendo's
+	   cyan so the front page stays in this palette. ── */
+	--wii-face: linear-gradient(
+		to bottom,
+		#ffffff 0%,
+		#fdfdfe 40%,
+		#eef1f4 47%,
+		#dee4e9 100%
+	);
+	--wii-gleam: linear-gradient(
+		to bottom,
+		rgba(255, 255, 255, 0.95) 0%,
+		rgba(255, 255, 255, 0.42) 40%,
+		rgba(255, 255, 255, 0) 62%
+	);
+
+	/* ── Holy surreal — a slow sunburst behind the wordmark, and the film
+	   grain that keeps all this gloss from looking sterile. ── */
+	--halo-rays: repeating-conic-gradient(
+		from 0deg,
+		rgba(82, 173, 133, 0.5) 0deg 1.5deg,
+		rgba(82, 173, 133, 0) 1.5deg 6deg
+	);
+	--grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+
+	/* Cyberwave 2000 = the dr. toke wordmark. */
+	--font-logo:   'Cyberwave 2000', 'Star Crush', 'Pixelify Sans', monospace;
+	--font-pixel:  'Pixelta', 'VT323', 'Pixelify Sans', monospace;
+	--font-ubuntu: 'Ubuntu Sans', system-ui, sans-serif;
+}
+
+@layer base {
+	*, *::before, *::after {
+		box-sizing: border-box;
+		margin: 0;
+		padding: 0;
+	}
+
+	html {
+		scroll-behavior: smooth;
+		-webkit-text-size-adjust: 100%;
+	}
+
+	body {
+		background: var(--paper);
+		color: var(--ink);
+		font-family: 'Ubuntu Sans', system-ui, sans-serif;
+		overflow-x: hidden;
+		line-height: 1.6;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	::selection {
+		background: var(--ink);
+		color: var(--paper);
+	}
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   CATALOG SHELL — the dark dr-toke world, scoped.
+   Everything inside renders exactly like apps/web in ../dr-toke.
+   ════════════════════════════════════════════════════════════════════════ */
+.catalog-shell {
+	background: var(--bg);
+	color: var(--cream);
+	font-family: var(--font-body), system-ui, sans-serif;
+	min-height: 100vh;
+}
+.catalog-shell ::selection {
+	background: var(--gold);
+	color: var(--bg);
+}
+.catalog-shell ::-webkit-scrollbar       { height: 6px; width: 6px; }
+.catalog-shell ::-webkit-scrollbar-track { background: var(--bg); }
+.catalog-shell ::-webkit-scrollbar-thumb { background: var(--green3); border-radius: 3px; }
+
+/* ── Scroll reveal (ported from apps/web/styles/globals.css) ── */
+.reveal {
+	opacity: 0;
+	transform: translateY(28px);
+	transition:
+		opacity  0.65s cubic-bezier(0.22, 1, 0.36, 1),
+		transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal.visible { opacity: 1; transform: translateY(0); }
+.reveal-delay-1 { transition-delay: 0.08s; }
+.reveal-delay-2 { transition-delay: 0.16s; }
+.reveal-delay-3 { transition-delay: 0.24s; }
+.reveal-delay-4 { transition-delay: 0.32s; }
+.reveal-delay-5 { transition-delay: 0.40s; }
+
+/* ── Card hover (ported) ── */
+.card-hover {
+	transition:
+		border-color 0.25s ease,
+		transform    0.25s cubic-bezier(0.22, 1, 0.36, 1),
+		box-shadow   0.25s ease;
+	will-change: transform;
+}
+.card-hover:hover {
+	transform: translateY(-4px);
+	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Survey step transition (ported) ── */
+@keyframes stepIn {
+	from { opacity: 0; transform: translateX(20px); }
+	to   { opacity: 1; transform: translateX(0); }
+}
+.step-in { animation: stepIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* ── Forum post body (ported) ── */
+.prose-toke { line-height: 1.75; font-size: 0.98rem; }
+.prose-toke h1, .prose-toke h2, .prose-toke h3, .prose-toke h4 {
+	font-family: var(--font-display), serif;
+	color: var(--cream);
+	font-weight: 700;
+	margin: 1.6rem 0 0.6rem;
+	line-height: 1.25;
+}
+.prose-toke h1 { font-size: 1.8rem; }
+.prose-toke h2 { font-size: 1.45rem; }
+.prose-toke h3 { font-size: 1.2rem; }
+.prose-toke p  { margin: 0 0 1rem; }
+.prose-toke ul { margin: 0 0 1rem 1.2rem; list-style: disc; }
+.prose-toke li { margin-bottom: 0.35rem; }
+.prose-toke a  { color: var(--gold); text-decoration: underline; }
+.prose-toke strong { color: var(--cream); }
+.prose-toke code {
+	font-family: ui-monospace, monospace;
+	background: var(--bg3);
+	padding: 0.1rem 0.35rem;
+	border-radius: 3px;
+	font-size: 0.85em;
+}
+.prose-toke blockquote {
+	border-left: 3px solid var(--gold);
+	padding-left: 1rem;
+	margin: 0 0 1rem;
+	color: var(--cream2);
+	font-style: italic;
+}

@@ -27,10 +27,11 @@ Direct DB inspection:
 docker compose exec -T postgres psql -U drtoke -d drtoke -c "<sql>"
 ```
 
-Frontend, separately:
+Frontend, separately (`ADR-018` — `apps/web` in this same repo now, not a
+sibling checkout):
 
 ```bash
-cd ../skeleton
+cd apps/web
 VITE_API_URL=http://localhost:8080 pnpm dev
 pnpm check && pnpm build      # the PR gate
 ```
@@ -74,7 +75,7 @@ ADMIN_TOTP_ISSUER=drtoke
 
 # Publishing
 NETLIFY_BUILD_HOOK=
-FRONTEND_CHECKOUT=../skeleton
+FRONTEND_CHECKOUT=../web       # apps/api -> apps/web, same repo (ADR-018)
 
 # Serving
 ALLOWED_ORIGINS=

@@ -35,8 +35,9 @@ must be complete before M0 starts.
 What has changed around it:
 
 - The frontend is no longer Next.js. It is **SvelteKit 5 + Tailwind 4, fully
-  static**, in a separate repo (`dr-toke/skeleton`), live at
-  `toke-v02.netlify.app`. Design is done and is not ours to change.
+  static**, living as `apps/web` in this monorepo (`ADR-018`; originally its
+  own repo, `dr-toke/skeleton`, brought in as-is), live at
+  `toke-v02.netlify.app`. Design is done and is not ours to restyle casually.
 - `packages/data/*.ts` (brands, states, roa) was Phase-0 bootstrap. The DB is
   the source of truth.
 - Editorial copy currently lives in the frontend as `content.ts` files. It moves
@@ -173,32 +174,48 @@ becomes a publication with a CMS.
 
 ## 6. Repo layout
 
+**Monorepo** (`ADR-018`): `docs/` at root, shared by both apps; everything
+backend-specific nests under `apps/api/` so it stays self-contained.
+
 ```
-dr-toke-backend/
-├── cmd/
-│   ├── server/        API + admin binary
-│   ├── worker/        River job runner
-│   └── contentpull/   build-time export CLI
-├── internal/
-│   ├── api/           handlers, envelope, errors, OpenAPI annotations
-│   ├── admin/         HTMX handlers + templates
-│   ├── content/       docs, revisions, markdown validate + render
-│   ├── resolve/       rule engine: cannabinoids, facets, evidence,
-│   │                  precedence  ← the single writer
-│   ├── compliance/    hard-block vs review tiers
-│   ├── ingest/        selector-driven adapters, staging, gate, dedup
-│   ├── jobs/          River job definitions
-│   ├── media/         fetch, transcode, blurhash, proxy
-│   ├── auth/          public (pseudonymous) + admin (TOTP)
-│   ├── db/migrations/ goose
-│   └── config/        env-driven config
-├── harvest/
-│   ├── rules/         cannabinoids, categories, compliance, dedup  (JSON)
-│   ├── scrapers/      one YAML selector spec per store
-│   └── reference/     states, roa, aggregators, brands
-├── testdata/golden/   auto-appended fixtures
-└── openapi/           generated spec → frontend types
+drtoke/
+├── docs/               this doc set — the shared contract, read by both apps
+├── apps/
+│   ├── web/            SvelteKit 5 + Tailwind 4, fully static — brought in
+│   │                   as-is from the original `dr-toke/skeleton` repo
+│   └── api/
+│       ├── cmd/
+│       │   ├── server/        API + admin binary
+│       │   ├── worker/        River job runner
+│       │   └── contentpull/   build-time export CLI
+│       ├── internal/
+│       │   ├── api/           handlers, envelope, errors, OpenAPI annotations
+│       │   ├── admin/         HTMX handlers + templates
+│       │   ├── content/       docs, revisions, markdown validate + render
+│       │   ├── resolve/       rule engine: cannabinoids, facets, evidence,
+│       │   │                  precedence  ← the single writer
+│       │   ├── compliance/    hard-block vs review tiers
+│       │   ├── ingest/        selector-driven adapters, staging, gate, dedup
+│       │   ├── jobs/          River job definitions
+│       │   ├── media/         fetch, transcode, blurhash, proxy
+│       │   ├── auth/          public (pseudonymous) + admin (TOTP)
+│       │   ├── db/migrations/ goose
+│       │   └── config/        env-driven config
+│       ├── harvest/
+│       │   ├── rules/         cannabinoids, categories, compliance, dedup  (JSON)
+│       │   ├── scrapers/      one YAML selector spec per store
+│       │   └── reference/     states, roa, aggregators, brands
+│       ├── testdata/golden/   auto-appended fixtures
+│       ├── openapi/           generated spec → apps/web/src/lib/api/generated/
+│       └── SYMBOLS.md
 ```
+
+**Boundary discipline replaces repo separation.** Nothing in `apps/api` imports
+from `apps/web` or vice versa — the only thing that crosses is generated
+TypeScript (`apps/api/openapi` → `apps/web/src/lib/api/generated/`) and, at
+build time, `content:pull`'s generated `.ts`/`.json` files (`07-CONTENT-CMS.md`).
+A PR touching both directories in the same commit should still be reviewable
+as two independent diffs.
 
 **Modularity rules.** SQL lives only in the store layer. Classification lives
 only in `resolve`. HTTP lives only in `api`. A file reaching across two of those

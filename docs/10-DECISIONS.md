@@ -344,11 +344,44 @@ image upload/replace, not just markdown.
 
 ---
 
+## ADR-018 — Monorepo: `apps/web` + `apps/api` in one repository
+
+**Status:** accepted (partially reverses the "separate repos" framing in
+ADR-001 / `01-ARCHITECTURE.md §1` and the frontend-stack row of the
+Superseded table below)
+
+**Decision:** frontend (`skeleton`, brought in as-is) and backend live in one
+repository as `apps/web` and `apps/api`. `docs/` stays at repo root, shared by
+both. `harvest/`, `testdata/golden/`, `openapi/`, `SYMBOLS.md` move under
+`apps/api/` — they're backend-only concerns, and each app in a monorepo should
+own its own data rather than reach outside its directory tree.
+
+**Why:** stakeholder decision — one repository, one clone, one PR history
+across contract changes on both sides of the HTTP boundary.
+
+**What does NOT change:** the architectural invariant in `00-CONSTITUTION.md
+§5` — "frontend and backend are separate programs meeting only at HTTP/JSON
+and generated types" — is about *coupling*, not *repository count*. `apps/web`
+is still fully static, still builds independently, still renders with the API
+down (`ADR-004` is untouched). `apps/api` still knows nothing about Svelte.
+Co-locating the code does not mean co-locating the runtime — that boundary is
+now enforced by discipline (no imports across the `apps/` boundary, contract
+changes flow through `openapi/` codegen, not shared source) rather than by
+physical repo separation. The frontend is still "already designed, not ours to
+restyle casually" — that rule survives the repo merge unchanged; it was never
+about which repo the code lived in.
+
+**Consequence:** every doc reference to "the frontend is a separate
+repository" (`README.md`, `01-ARCHITECTURE.md §1`, `02-FRONTEND-CONTRACT.md`
+header) described the *pre-monorepo* state and has been corrected to match.
+
+---
+
 ## Superseded
 
 | Was | Now | Where |
 |---|---|---|
-| Next.js 15 + Turborepo monorepo frontend | SvelteKit 5 + Tailwind 4, separate repo (`dr-toke/skeleton`) | `01-ARCHITECTURE.md §1` |
+| Next.js 15 + Turborepo monorepo frontend | SvelteKit 5 + Tailwind 4, `apps/web` in this monorepo (`ADR-018`) | `01-ARCHITECTURE.md §1` |
 | Vercel hosting | Netlify (clearnet) | `09-OPS.md §5` |
 | `packages/data/*.ts` as source of truth | Postgres; static TS was Phase-0 bootstrap | `03-DOMAIN-MODEL.md §6–7` |
 | `SITE_TIER=clearnet\|onion` build flag | Same static bundle, different `VITE_API_URL` + feature gating | `09-OPS.md §5` |

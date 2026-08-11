@@ -13,11 +13,11 @@ The frontend's `content.ts`-per-section convention is correct. Keep it.
 ```
 pnpm content:pull
   → GET /api/content/export?since=<etag>
-  → writes  src/lib/sections/<section>/content.generated.ts
-            src/lib/content/posts/<slug>.json
-            src/lib/content/index.json           (search index)
-            static/data/products/*.json          (catalogue snapshot)
-            static/data/catalog-index.json       (snapshot manifest)
+  → writes  apps/web/src/lib/sections/<section>/content.generated.ts
+            apps/web/src/lib/content/posts/<slug>.json
+            apps/web/src/lib/content/index.json           (search index)
+            apps/web/static/data/products/*.json          (catalogue snapshot)
+            apps/web/static/data/catalog-index.json       (snapshot manifest)
 ```
 
 Generated files are **committed**, not gitignored. That buys:
@@ -30,8 +30,10 @@ Generated files are **committed**, not gitignored. That buys:
 Hand-written `content.ts` keeps working for anything not yet migrated. Sections
 move over one at a time; nothing breaks mid-migration.
 
-`content:pull` is a small Go CLI in **this** repo (`cmd/contentpull`), invoked by
-CI against a checkout of the frontend. The frontend repo gains no Go dependency.
+`content:pull` is a small Go CLI (`apps/api/cmd/contentpull`), invoked by CI
+against `apps/web` in this same repo (`ADR-018`) rather than a separate
+checkout. `apps/web` still gains no Go dependency — the CLI writes generated
+files into it from outside, nothing in `apps/web`'s own `package.json` changes.
 
 ---
 

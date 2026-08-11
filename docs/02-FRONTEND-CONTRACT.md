@@ -1,7 +1,9 @@
 # 02 — Frontend Contract
 
-> The frontend (`dr-toke/skeleton`, SvelteKit 5 + Tailwind 4, static, live at
-> `toke-v02.netlify.app`) is **already designed**. It is not ours to change.
+> The frontend (`apps/web` in this monorepo — brought in as-is from the
+> original `dr-toke/skeleton` repo, `ADR-018` — SvelteKit 5 + Tailwind 4,
+> static, live at `toke-v02.netlify.app`) is **already designed**. It is not
+> ours to restyle casually just because it now shares a repo with the backend.
 > This document is what the backend owes it — functionally and aesthetically.
 >
 > Rule of thumb: the frontend does **no** data cleaning, no price maths, no
