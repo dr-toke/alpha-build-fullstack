@@ -383,6 +383,10 @@ type ProductCluster struct {
 	BrandID          *uuid.UUID
 	Name             string
 	ShortDescription *string // capped ~160 chars server-side, 02-FRONTEND-CONTRACT.md §8
+	// Fingerprint is harvest/rules/dedup.md's exact-match key
+	// (brand|name|volume|concentration_mg, sha256, truncated). Added in M4
+	// — internal/db/migrations/008, after M0's original schema pass.
+	Fingerprint *string
 
 	// Cannabinoid content — 03-DOMAIN-MODEL.md §3. All nullable, NEVER zero
 	// for unknown (00-CONSTITUTION.md §5).

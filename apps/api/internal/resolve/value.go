@@ -1,6 +1,54 @@
 package resolve
 
-import "github.com/dr-toke/api/internal/domain"
+import (
+	"fmt"
+	"math"
+	"strconv"
+	"strings"
+
+	"github.com/dr-toke/api/internal/domain"
+)
+
+// ParsePriceINR turns a scraped price string into int64 paise —
+// 00-CONSTITUTION.md §5's "Money is int64 paise. Never float" applies from
+// the moment a price leaves the scraper, not just at the API boundary.
+// Not specified anywhere in the docs (no ADR, no build-order line covers
+// this conversion) — NEW, needed because RawProduct.PriceRaw (domain
+// types.go) is a plain string and nothing before this milestone ever
+// turned it into the ProductListing.PricePaise the rest of the system
+// (store, resolve.PerMg, ValueTier) assumes exists.
+//
+// Strips ₹/Rs/INR prefixes and thousands-comma separators — matches
+// shopify.go's own "₹" + v.Price construction (its comment: "normaliser
+// strips ₹/commas — don't pre-format here"), this is that normaliser.
+// Rounds to the nearest paisa rather than truncating, since Shopify's own
+// decimal strings ("999.00") are already exact to the paisa in practice —
+// rounding only matters for the rare malformed input.
+func ParsePriceINR(raw string) (int64, error) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return 0, fmt.Errorf("resolve: empty price")
+	}
+	s = strings.NewReplacer(
+		"₹", "",
+		"Rs.", "",
+		"Rs", "",
+		"INR", "",
+		",", "",
+		" ", "",
+	).Replace(s)
+	if s == "" {
+		return 0, fmt.Errorf("resolve: no digits in price %q", raw)
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, fmt.Errorf("resolve: parse price %q: %w", raw, err)
+	}
+	if v < 0 {
+		return 0, fmt.Errorf("resolve: negative price %q", raw)
+	}
+	return int64(math.Round(v * 100)), nil
+}
 
 // PerMg computes ₹/mg from a paise price and an mg figure. Returns nil (not
 // zero) whenever mg is unknown or non-positive — 00-CONSTITUTION.md §5:
