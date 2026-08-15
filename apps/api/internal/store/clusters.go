@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/dr-toke/api/internal/domain"
 	"github.com/google/uuid"
@@ -220,19 +221,38 @@ func (s *Store) ClusterByFingerprint(ctx context.Context, fingerprint string) (*
 // param surface; this covers what's storage-layer-obvious now (publishable
 // gate, brand, keyset pagination on rank_score) rather than guessing ahead
 // of the handler that will actually call it. See M3-DECISIONS.md.
+// SortNew and SortValue are ClusterFilter.Sort's two modes —
+// 05-API-REFERENCE.md §1: "sort=value|price|new. Default new when no basis
+// given" and "sort=value without basis is misleading — ₹/mg-CBD and ₹/mg-THC
+// are not comparable. Hence the new default." price-basis-scoped sorting
+// (?basis=cbd|thc) is not implemented by this first pass — internal/api's
+// M8 build order names it as products.go's job; ListClusters only offers
+// the two source-of-truth orderings the store layer itself can support
+// without a basis parameter threading all the way down.
+const (
+	SortNew   = "new"
+	SortValue = "value"
+)
+
 type ClusterFilter struct {
 	BrandID         *uuid.UUID
 	PublishableOnly bool
-	// Cursor: keyset pagination on (rank_score DESC, id ASC) —
-	// 02-FRONTEND-CONTRACT.md §5, never OFFSET. Both nil means "first page."
-	CursorRankScore *float64
-	CursorID        *uuid.UUID
-	Limit           int
+	// Sort selects the ORDER BY; "" defaults to SortNew, matching the doc's
+	// stated default.
+	Sort string
+	// Cursor fields — keyset pagination, never OFFSET
+	// (02-FRONTEND-CONTRACT.md §5). Which pair matters depends on Sort:
+	// CursorFirstSeenAt+CursorID for SortNew, CursorRankScore+CursorID for
+	// SortValue. All nil means "first page."
+	CursorFirstSeenAt *time.Time
+	CursorRankScore   *float64
+	CursorID          *uuid.UUID
+	Limit             int
 }
 
-// ListClusters returns clusters ranked by rank_score, keyset-paginated.
-// Stable tie-break on id ASC per 02-FRONTEND-CONTRACT.md §5 — "so the grid
-// doesn't reshuffle between loads."
+// ListClusters returns clusters keyset-paginated in the mode f.Sort
+// requests. Stable tie-break on id ASC per 02-FRONTEND-CONTRACT.md §5 — "so
+// the grid doesn't reshuffle between loads" — in both modes.
 func (s *Store) ListClusters(ctx context.Context, f ClusterFilter) ([]domain.ProductCluster, error) {
 	limit := f.Limit
 	if limit <= 0 || limit > 100 {
@@ -254,15 +274,26 @@ func (s *Store) ListClusters(ctx context.Context, f ClusterFilter) ([]domain.Pro
 	if f.BrandID != nil {
 		q += ` AND brand_id = ` + next(*f.BrandID)
 	}
-	if f.CursorRankScore != nil && f.CursorID != nil {
-		// rank_score may be NULL for un-ranked rows; NULLS LAST keeps them
-		// out of the normal keyset walk entirely rather than producing an
-		// undefined comparison against a cursor value.
-		rs := next(*f.CursorRankScore)
-		id := next(*f.CursorID)
-		q += fmt.Sprintf(` AND (rank_score, id) < (%s, %s)`, rs, id)
+
+	if f.Sort == SortValue {
+		if f.CursorRankScore != nil && f.CursorID != nil {
+			rs := next(*f.CursorRankScore)
+			id := next(*f.CursorID)
+			q += fmt.Sprintf(` AND (rank_score, id) < (%s, %s)`, rs, id)
+		}
+		// rank_score may be NULL for un-ranked rows (e.g. a publishable
+		// product with no computable ₹/mg, like hemp-seed oil) — excluded
+		// from this ordering entirely rather than sorting NULLS LAST, since
+		// "value" sort has nothing meaningful to say about them.
+		q += ` AND rank_score IS NOT NULL ORDER BY rank_score DESC, id ASC LIMIT ` + next(limit)
+	} else {
+		if f.CursorFirstSeenAt != nil && f.CursorID != nil {
+			fs := next(*f.CursorFirstSeenAt)
+			id := next(*f.CursorID)
+			q += fmt.Sprintf(` AND (first_seen_at, id) < (%s, %s)`, fs, id)
+		}
+		q += ` ORDER BY first_seen_at DESC, id ASC LIMIT ` + next(limit)
 	}
-	q += ` AND rank_score IS NOT NULL ORDER BY rank_score DESC, id ASC LIMIT ` + next(limit)
 
 	rows, err := s.Pool.Query(ctx, q, args...)
 	if err != nil {

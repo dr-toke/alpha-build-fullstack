@@ -154,7 +154,7 @@ func TestListClusters(t *testing.T) {
 	}
 
 	t.Run("publishable filter excludes the unpublishable row even though it ranks highest", func(t *testing.T) {
-		got, err := testStore.ListClusters(ctx, ClusterFilter{BrandID: &brandID, PublishableOnly: true, Limit: 10})
+		got, err := testStore.ListClusters(ctx, ClusterFilter{BrandID: &brandID, PublishableOnly: true, Sort: SortValue, Limit: 10})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -169,7 +169,7 @@ func TestListClusters(t *testing.T) {
 	})
 
 	t.Run("keyset pagination walks forward without duplicates or gaps", func(t *testing.T) {
-		page1, err := testStore.ListClusters(ctx, ClusterFilter{BrandID: &brandID, PublishableOnly: true, Limit: 2})
+		page1, err := testStore.ListClusters(ctx, ClusterFilter{BrandID: &brandID, PublishableOnly: true, Sort: SortValue, Limit: 2})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -178,7 +178,7 @@ func TestListClusters(t *testing.T) {
 		}
 		last := page1[len(page1)-1]
 		page2, err := testStore.ListClusters(ctx, ClusterFilter{
-			BrandID: &brandID, PublishableOnly: true, Limit: 2,
+			BrandID: &brandID, PublishableOnly: true, Sort: SortValue, Limit: 2,
 			CursorRankScore: last.RankScore, CursorID: &last.ID,
 		})
 		if err != nil {
@@ -192,6 +192,56 @@ func TestListClusters(t *testing.T) {
 				if p1.ID == p2.ID {
 					t.Errorf("cluster %s appeared on both pages", p1.ID)
 				}
+			}
+		}
+	})
+
+	t.Run("default sort (unset Sort field) is SortNew, most-recent first", func(t *testing.T) {
+		got, err := testStore.ListClusters(ctx, ClusterFilter{BrandID: &brandID, PublishableOnly: true, Limit: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 3 {
+			t.Fatalf("got %d clusters, want 3 (unranked-eligible too — SortNew doesn't require rank_score)", len(got))
+		}
+		for i := 1; i < len(got); i++ {
+			if got[i-1].FirstSeenAt.Before(got[i].FirstSeenAt) {
+				t.Errorf("not sorted first_seen_at DESC: %v before %v", got[i-1].FirstSeenAt, got[i].FirstSeenAt)
+			}
+		}
+	})
+
+	t.Run("SortNew includes a publishable row with no rank_score at all", func(t *testing.T) {
+		var unrankedID uuid.UUID
+		if err := testStore.Pool.QueryRow(ctx,
+			`INSERT INTO product_clusters (name, concentration_type, brand_id, rank_score, publishable)
+			 VALUES ($1, 'unknown', $2, NULL, true) RETURNING id`,
+			"Unranked "+randSuffix(), brandID,
+		).Scan(&unrankedID); err != nil {
+			t.Fatal(err)
+		}
+
+		gotNew, err := testStore.ListClusters(ctx, ClusterFilter{BrandID: &brandID, PublishableOnly: true, Sort: SortNew, Limit: 50})
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, c := range gotNew {
+			if c.ID == unrankedID {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("SortNew excluded a publishable, unranked cluster — should only exclude those from SortValue")
+		}
+
+		gotValue, err := testStore.ListClusters(ctx, ClusterFilter{BrandID: &brandID, PublishableOnly: true, Sort: SortValue, Limit: 50})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range gotValue {
+			if c.ID == unrankedID {
+				t.Error("SortValue included an unranked cluster — rank_score IS NOT NULL filter did not hold")
 			}
 		}
 	})

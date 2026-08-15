@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/dr-toke/api/internal/domain"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -65,6 +66,21 @@ func (s *Store) BrandBySlug(ctx context.Context, slug string) (*domain.Brand, er
 			return nil, fmt.Errorf("store.BrandBySlug(%s): %w", slug, domain.ErrNotFound)
 		}
 		return nil, fmt.Errorf("store.BrandBySlug: %w", err)
+	}
+	return b, nil
+}
+
+// BrandByID looks up a brand by its UUID — product_clusters.brand_id is a
+// FK on id, not slug, so internal/api's product payload assembly (which
+// only has a cluster's BrandID) needs this rather than BrandBySlug.
+func (s *Store) BrandByID(ctx context.Context, id uuid.UUID) (*domain.Brand, error) {
+	q := brandSelectColumns + ` FROM brands WHERE id = $1`
+	b, err := scanBrand(s.Pool.QueryRow(ctx, q, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("store.BrandByID(%s): %w", id, domain.ErrNotFound)
+		}
+		return nil, fmt.Errorf("store.BrandByID: %w", err)
 	}
 	return b, nil
 }
