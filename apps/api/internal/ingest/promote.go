@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 
 	"github.com/dr-toke/api/internal/compliance"
 	"github.com/dr-toke/api/internal/domain"
@@ -210,16 +211,29 @@ const unverifiedBrandTrust = 0.7
 func buildClusterShell(p domain.RawProduct, cb resolve.CannabinoidExtraction, volumeML, weightG float64,
 	pricePaise int64, brandID *uuid.UUID, brandTrust float64, form resolve.FacetResult, publishable bool,
 ) domain.ProductCluster {
-	cbdPerMg := resolve.PerMg(pricePaise, cb.CBDMg)
-	thcPerMg := resolve.PerMg(pricePaise, cb.THCMg)
-	totalPerMg := resolve.PerMg(pricePaise, cb.TotalCannabinoidsMg)
-	dominantPerMg, basis := resolve.DominantPerMg(cbdPerMg, thcPerMg, totalPerMg)
-	valueTier := resolve.ValueTier(dominantPerMg)
-
+	var cbdPerMg, thcPerMg, totalPerMg, dominantPerMg *float64
 	var basisPtr *string
-	if basis != "" {
-		b := string(basis)
-		basisPtr = &b
+	var valueTier *domain.ValueTier
+
+	// Found via a real audit of the live cbdstore.in catalog, not a
+	// hypothetical: "50mg (90 Capsules)" was priced as if the whole
+	// bottle were 50mg total, producing a ₹126/mg figure ~90x too high.
+	// mgLikelyPerUnitUnreconciled suppresses ₹/mg-derived pricing for
+	// exactly that pattern — 00-CONSTITUTION.md's "we publish less rather
+	// than publish wrong" — while leaving the raw cbd_mg/thc_mg figures
+	// alone (they're still honest, useful per-unit dosing info, just not
+	// safe to divide the pack PRICE by).
+	if !mgLikelyPerUnitUnreconciled(p.Name, p.Description, cb.Evidence) {
+		cbdPerMg = resolve.PerMg(pricePaise, cb.CBDMg)
+		thcPerMg = resolve.PerMg(pricePaise, cb.THCMg)
+		totalPerMg = resolve.PerMg(pricePaise, cb.TotalCannabinoidsMg)
+		var basis domain.Basis
+		dominantPerMg, basis = resolve.DominantPerMg(cbdPerMg, thcPerMg, totalPerMg)
+		valueTier = resolve.ValueTier(dominantPerMg)
+		if basis != "" {
+			b := string(basis)
+			basisPtr = &b
+		}
 	}
 
 	// completeness: has-image + has-cannabinoid-dosage, per
@@ -264,6 +278,35 @@ func buildClusterShell(p domain.RawProduct, cb resolve.CannabinoidExtraction, vo
 		RankScore:             rankScore,
 		Publishable:           publishable,
 	}
+}
+
+// rePackQuantity matches "(N capsules)"/"(N gummies)"/"pack of N"-style
+// wording — a strong signal that a bare mg figure elsewhere in the text is
+// PER-UNIT dosing (mg per capsule/gummy/tablet), not the product's total
+// cannabinoid content.
+var rePackQuantity = regexp.MustCompile(`(?i)\(\s*\d+\s*(capsules?|gummies|gummy|tablets?|candi(?:es|y)|sachets?|pieces?)\s*\)|pack\s+of\s+\d+`)
+
+// mgLikelyPerUnitUnreconciled reports whether cb's mg figures should NOT be
+// divided into a per-mg price. harvest/rules/cannabinoids.json's
+// per-serving reconciliation (cannabinoids.go's "per-serving figure
+// reconciled to pack total" branch) only fires when a SEPARATE, larger
+// total-mg figure is also present in the text to reconcile against; a
+// listing whose only stated dose is per-unit, with no pack-total anywhere,
+// gives that reconciliation nothing to find — the ported extractor
+// (faithful to the prior alpha) has no notion of multiplying dose × unit
+// count from "(90 Capsules)" wording. Real, not hypothetical: this is what
+// was inflating "50mg (90 Capsules)" to a ₹126/mg figure ~90x too high in
+// the live cbdstore.in catalog.
+func mgLikelyPerUnitUnreconciled(name, description string, ev resolve.Evidence) bool {
+	if !rePackQuantity.MatchString(name) && !rePackQuantity.MatchString(description) {
+		return false
+	}
+	for _, note := range ev.Notes {
+		if note == "per-serving figure reconciled to pack total" {
+			return false // the extractor already found and applied a real pack total
+		}
+	}
+	return true
 }
 
 // resolveFacets runs every FacetResult through precedence.Resolve as the

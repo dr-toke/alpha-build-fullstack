@@ -185,6 +185,66 @@ func TestPromote(t *testing.T) {
 		}
 	})
 
+	t.Run("a pack-quantity listing gets no ₹/mg pricing instead of a wildly wrong one", func(t *testing.T) {
+		batchID, err := st.CreateBatch(ctx, slug)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The exact real cbdstore.in case: "50mg" here is PER CAPSULE, not
+		// the pack total (4500mg for 90 capsules) — nothing in the text
+		// states the real total, so the extractor (faithfully ported, no
+		// unit-multiplication logic) has no way to reconcile it. Dividing
+		// price by the raw 50mg would produce a ~90x-too-high ₹/mg.
+		_, err = st.StageRawProduct(ctx, batchID, domain.RawProduct{
+			SourceSlug:  slug,
+			SourceURL:   "https://example.com/products/cannamed-capsules?variant=1",
+			Name:        "CannaMed- Medical Cannabis Capsules 50mg (90 Capsules)",
+			BrandRaw:    "boheco",
+			PriceRaw:    "₹3150.00",
+			Description: "CannaMed capsules with CBD, THC. Each capsule is packed with carefully measured doses of high-quality cannabis.",
+			CategoryRaw: "Capsules",
+			RawData:     map[string]any{"in_stock": true},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.FinishBatch(ctx, batchID, 1); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := DecideGate(ctx, st, batchID); err != nil {
+			t.Fatal(err)
+		}
+		result, err := Promote(ctx, st, rs, crs, batchID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Promoted != 1 {
+			t.Fatalf("got Promoted=%d, want 1 (errors: %v)", result.Promoted, result.Errors)
+		}
+
+		var cbdMg, thcMg, cbdPerMg, thcPerMg, bestPerMg, rankScore *float64
+		var pricePaise *int64
+		row := st.Pool.QueryRow(ctx,
+			`SELECT cbd_mg, thc_mg, cbd_price_per_mg, thc_price_per_mg, best_price_per_mg, rank_score, best_price_paise
+			 FROM product_clusters pc
+			 JOIN product_listings pl ON pl.cluster_id = pc.id
+			 WHERE pl.source_url = 'https://example.com/products/cannamed-capsules?variant=1'`)
+		if err := row.Scan(&cbdMg, &thcMg, &cbdPerMg, &thcPerMg, &bestPerMg, &rankScore, &pricePaise); err != nil {
+			t.Fatal(err)
+		}
+
+		if cbdPerMg != nil || thcPerMg != nil || bestPerMg != nil || rankScore != nil {
+			t.Errorf("₹/mg-derived fields not suppressed: cbd_per_mg=%v thc_per_mg=%v best_per_mg=%v rank_score=%v",
+				cbdPerMg, thcPerMg, bestPerMg, rankScore)
+		}
+		if pricePaise == nil || *pricePaise != 315000 {
+			t.Errorf("best_price_paise = %v, want 315000 — the real price should still be recorded", pricePaise)
+		}
+		if cbdMg == nil {
+			t.Error("cbd_mg was nulled out too — only the derived ₹/mg fields should be suppressed, not the raw dosing info")
+		}
+	})
+
 	t.Run("promoting a non-approved batch is rejected", func(t *testing.T) {
 		batchID, err := st.CreateBatch(ctx, slug)
 		if err != nil {
