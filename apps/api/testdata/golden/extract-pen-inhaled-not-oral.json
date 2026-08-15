@@ -1,0 +1,14 @@
+{
+  "source": "Full live cbdstore.in catalog, flagged directly by the project owner (has personally used this product): \"Cannazo Uplift Plus... since no carrier is there its vapable/smokable, its pure extract no\" — every 'extract' bucket product in the live catalog was defaulting to route=oral, including ones sold as a vape-pen/dab-syringe applicator.",
+  "raw": {
+    "title": "Cannazo- De-Waxed OG Kush Uplift+ Pen (Full Spectrum THC Extract Syringe) Golden Extract - 1G",
+    "description": "An extra-strong, THC-dominant Vijaya leaf extract formulated for experienced users. Concentrated full-spectrum formulation."
+  },
+  "expect": {
+    "form": "concentrate",
+    "route": "inhaled",
+    "primary_category_legacy": "vapeable",
+    "forbid_categories_legacy": ["extract", "tincture"]
+  },
+  "regression_note": "Neither concentrate_markers ('no carrier oil' wording) nor concentrateSubWords ('dab'/'shatter'/'distillate') appear anywhere in this real listing's actual text — the ONLY signal that it's a dab/vape-pen product, not something swallowed, is 'Pen' and 'Syringe' in the name itself. The 'extract' legacy bucket's word list (categories.json) groups RSO/FECO (genuinely oral) and pure dab concentrates (genuinely inhaled) together with no route distinction; dabApplicatorWords (facets.go) is the narrow fix. Contrast with rso-feco-stays-oral.json — the default for 'extract' with none of these signals present is unchanged."
+}

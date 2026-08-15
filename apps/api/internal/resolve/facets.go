@@ -240,16 +240,25 @@ var concentrateSubWords = wordSet([]string{
 	"distillate", "shatter", "dab", "dabs", "dabbing",
 })
 
+// dabApplicatorWords are dab/vape-pen delivery-hardware words — NEW, not
+// part of the harvested categories.json word lists (that file's "vapeable"
+// list has "vape pen" as a two-word phrase but no standalone "pen"; its
+// "extract" list has "syringe" grouped in without any route distinction).
+// Checked only within the "extract" branch below, after concentrate_markers
+// and concentrateSubWords have already had their chance — see that branch's
+// doc comment for the real product that motivated this.
+var dabApplicatorWords = wordSet([]string{"pen", "syringe"})
+
 // resolveForm turns a formDetection into the new facet's Form/Route/Extract
 // proposal. Extract is returned alongside Form because the "extract" legacy
 // bucket (RSO/FECO/hash oil) doesn't correspond to a form facet value at
 // all in 03-DOMAIN-MODEL.md §2 — it's what feeds the SEPARATE `extract`
 // facet (full_spectrum/broad_spectrum/isolate) instead; when the legacy
 // classifier's primary bucket IS "extract", the new form facet resolves to
-// concentrate (it's a concentrated cannabis product) with route=oral, per
-// the harvested "raw extract with no other form is most commonly ingested
-// orally" note — this is a form/route pairing the legacy code never had to
-// make explicit, because it didn't have a separate route facet.
+// concentrate (it's a concentrated cannabis product) — route is oral or
+// inhaled depending on inhalation signals, see that switch case's own
+// comment; this is a form/route pairing the legacy code never had to make
+// explicit, because it didn't have a separate route facet.
 func resolveForm(name string, d formDetection) (form domain.FormValue, route domain.RouteValue, hasRoute bool, confidence float32, ambiguous bool, reason string) {
 	confidence = 0.85
 	if d.ambiguous {
@@ -271,6 +280,31 @@ func resolveForm(name string, d formDetection) (form domain.FormValue, route dom
 	case "beverage":
 		return domain.FormBeverage, domain.RouteOral, true, confidence, d.ambiguous, d.reason
 	case "extract":
+		// The harvested source's own reasoning here was "raw extract with
+		// no other form is most commonly ingested orally" — true for RSO/
+		// FECO (classically taken orally, often on food or in a capsule),
+		// but wrong for the OTHER real product type this same "extract"
+		// word list conflates: a raw, undiluted concentrate (resin/wax/a
+		// dab-pen syringe) meant to be vaporized, not swallowed. Found via
+		// a live-catalog check flagged directly by a user who has actually
+		// used one of these products ("Cannazo Uplift Plus... since no
+		// carrier is there its vapable/smokable, its pure extract") — the
+		// SAME "no carrier oil" reasoning this ruleset's own
+		// concentrate_markers pattern already treats as an inhalation
+		// signal in the vapeable branch below, applied here too for
+		// consistency, plus dabApplicatorWords ("pen," "syringe") since
+		// the real motivating product's only textual signal was neither a
+		// concentrate_marker phrase nor a concentrateSubWords hit — its
+		// variant name is literally "Uplift+ Pen."
+		if d.viaConcentrateMarker {
+			return domain.FormConcentrate, domain.RouteInhaled, true, confidence, d.ambiguous, d.reason
+		}
+		if ok, _ := MatchWordBoundary(concentrateSubWords, lowName); ok {
+			return domain.FormConcentrate, domain.RouteInhaled, true, confidence, d.ambiguous, d.reason
+		}
+		if ok, _ := MatchWordBoundary(dabApplicatorWords, lowName); ok {
+			return domain.FormConcentrate, domain.RouteInhaled, true, confidence, d.ambiguous, d.reason
+		}
 		return domain.FormConcentrate, domain.RouteOral, true, confidence, d.ambiguous, d.reason
 	case "nutrition":
 		// No "nutrition" form value exists in 03-DOMAIN-MODEL.md §2 — hemp

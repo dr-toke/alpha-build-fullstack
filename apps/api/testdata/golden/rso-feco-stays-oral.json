@@ -1,0 +1,14 @@
+{
+  "source": "Written alongside extract-pen-inhaled-not-oral.json to prove that fix didn't overcorrect — a raw whole-plant extract with none of the new inhalation signals (no concentrate_markers wording, no dab/shatter/distillate, no pen/syringe) must stay route=oral, the harvested source's original default for classic RSO/FECO-style products.",
+  "raw": {
+    "title": "Rick Simpson Style Full Spectrum Cannabis Extract - Whole Plant - 5g",
+    "description": "Traditional whole-plant cannabis extract, taken by mouth in small measured doses, often on a piece of food."
+  },
+  "expect": {
+    "form": "concentrate",
+    "route": "oral",
+    "primary_category_legacy": "extract",
+    "forbid_categories_legacy": ["vapeable", "smokable", "tincture"]
+  },
+  "regression_note": "First draft of this fixture used the word 'oil' in the title ('Full Extract Cannabis Oil') and failed for an unrelated reason: categories.json's tincture word list includes 'oil,' and tincture outranks extract in form_priority_primary_selection — so it matched form=oil_tincture/route=sublingual instead of ever reaching the extract branch at all. Rewritten to avoid every tincture-trigger word (oil/oils/tincture/drop/drops/sublingual/spray) so this fixture actually exercises the code path it's meant to test."
+}
