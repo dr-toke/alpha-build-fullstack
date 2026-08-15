@@ -151,7 +151,11 @@ func promoteOne(ctx context.Context, st *store.Store, rs *resolve.RuleSet, crs *
 		return false, fmt.Errorf("dedup: %w", err)
 	}
 
-	facets := resolveFacets(clusterID, form, route, extract, profile, carrier, purchasable)
+	overrides, err := st.OverridesFor(ctx, clusterID)
+	if err != nil {
+		return false, fmt.Errorf("loading overrides: %w", err)
+	}
+	facets := resolveFacets(clusterID, overrides, form, route, extract, profile, carrier, purchasable)
 	if err := st.UpsertFacets(ctx, facets); err != nil {
 		return false, fmt.Errorf("upsert facets: %w", err)
 	}
@@ -371,7 +375,21 @@ func mgLikelyPerUnitUnreconciled(name, description string, ev resolve.Evidence) 
 // collects whichever facets actually proposed a value. A facet with no
 // signal (empty Value, e.g. ResolveRoute when hasRoute is false) is simply
 // omitted, not written as an empty row.
-func resolveFacets(clusterID uuid.UUID, form, route, extract, profile, carrier, purchasable resolve.FacetResult) []domain.ProductFacet {
+//
+// overrides were previously never read here at all — store.SetOverride/
+// OverridesFor and the product_facet_overrides table (M3) existed but
+// nothing in the live pipeline ever consulted them, so a human correction
+// could be written but would just get silently overwritten by the next
+// re-scrape. Wired up here: 03-DOMAIN-MODEL.md §2's precedence
+// (override > rule > model > default) now actually holds at promote time,
+// not just in resolve.Resolve()'s own logic — an override survives every
+// future re-scrape, exactly as the docs describe.
+func resolveFacets(clusterID uuid.UUID, overrides []domain.ProductFacetOverride, form, route, extract, profile, carrier, purchasable resolve.FacetResult) []domain.ProductFacet {
+	overrideByFacet := make(map[domain.Facet]*domain.ProductFacetOverride, len(overrides))
+	for i := range overrides {
+		overrideByFacet[overrides[i].Facet] = &overrides[i]
+	}
+
 	proposals := []struct {
 		facet  domain.Facet
 		result resolve.FacetResult
@@ -387,7 +405,7 @@ func resolveFacets(clusterID uuid.UUID, form, route, extract, profile, carrier, 
 	var out []domain.ProductFacet
 	for _, p := range proposals {
 		r := p.result
-		f := resolve.Resolve(clusterID, p.facet, resolve.FacetInputs{Rule: &r}, classifierVersion)
+		f := resolve.Resolve(clusterID, p.facet, resolve.FacetInputs{Override: overrideByFacet[p.facet], Rule: &r}, classifierVersion)
 		if f != nil {
 			out = append(out, *f)
 		}

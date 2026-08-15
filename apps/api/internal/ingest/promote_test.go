@@ -8,6 +8,7 @@ import (
 	"github.com/dr-toke/api/internal/compliance"
 	"github.com/dr-toke/api/internal/domain"
 	"github.com/dr-toke/api/internal/resolve"
+	"github.com/google/uuid"
 )
 
 // TestPromote proves the full staging -> live pipeline against a real
@@ -344,6 +345,89 @@ func TestPromote(t *testing.T) {
 		}
 		if bestPerMg != nil {
 			t.Errorf("best_price_per_mg = %v, want nil — ₹1624/mg is far outside the 0.10-100 sane band and should have been suppressed", *bestPerMg)
+		}
+	})
+
+	t.Run("a human override survives re-promotion, not just the first classification", func(t *testing.T) {
+		// product_facet_overrides (M3) and store.SetOverride/OverridesFor
+		// existed but nothing in the live pipeline ever read them —
+		// resolve.Resolve()'s own precedence (override > rule > model >
+		// default) only holds if something actually loads the override and
+		// passes it in. This proves it now does, and that it survives a
+		// SECOND promote of the same listing (the re-scrape case an
+		// override is specifically meant to survive).
+		url := "https://example.com/products/override-target?variant=1"
+		promoteOnce := func() uuid.UUID {
+			batchID, err := st.CreateBatch(ctx, slug)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = st.StageRawProduct(ctx, batchID, domain.RawProduct{
+				SourceSlug:  slug,
+				SourceURL:   url,
+				Name:        "Generic Full-Spectrum Cannabis Leaf Extract - 5g",
+				BrandRaw:    "boheco",
+				PriceRaw:    "₹2999.00",
+				Description: "A concentrated full-spectrum extract for experienced users.",
+				CategoryRaw: "Extracts",
+				RawData:     map[string]any{"in_stock": true},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := st.FinishBatch(ctx, batchID, 1); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := DecideGate(ctx, st, batchID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Promote(ctx, st, rs, crs, batchID); err != nil {
+				t.Fatal(err)
+			}
+			var clusterID uuid.UUID
+			if err := st.Pool.QueryRow(ctx,
+				`SELECT cluster_id FROM product_listings WHERE source_url = $1`, url,
+			).Scan(&clusterID); err != nil {
+				t.Fatal(err)
+			}
+			return clusterID
+		}
+
+		clusterID := promoteOnce()
+
+		var routeBefore string
+		if err := st.Pool.QueryRow(ctx,
+			`SELECT value FROM product_facets WHERE cluster_id = $1 AND facet = 'route'`, clusterID,
+		).Scan(&routeBefore); err != nil {
+			t.Fatal(err)
+		}
+		if routeBefore != "oral" {
+			t.Fatalf("test premise broken: route = %s before any override, want oral", routeBefore)
+		}
+
+		if err := st.SetOverride(ctx, domain.ProductFacetOverride{
+			ClusterID: clusterID, Facet: domain.FacetRoute, Value: "inhaled",
+			Reason: "confirmed by direct product use — this is a dab concentrate, not oral", SetBy: "test-admin",
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Re-promote the SAME listing (same fingerprint -> AssignCluster's
+		// refresh-on-match path) — the override must survive this, not get
+		// silently clobbered by the next re-scrape.
+		promoteOnce()
+
+		var routeAfter, routeSource string
+		if err := st.Pool.QueryRow(ctx,
+			`SELECT value, source FROM product_facets WHERE cluster_id = $1 AND facet = 'route'`, clusterID,
+		).Scan(&routeAfter, &routeSource); err != nil {
+			t.Fatal(err)
+		}
+		if routeAfter != "inhaled" {
+			t.Errorf("route = %s after override + re-promote, want inhaled — override did not survive re-scrape", routeAfter)
+		}
+		if routeSource != string(domain.FacetSourceOverride) {
+			t.Errorf("source = %s, want %s", routeSource, domain.FacetSourceOverride)
 		}
 	})
 
