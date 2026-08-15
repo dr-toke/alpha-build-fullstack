@@ -147,7 +147,57 @@ six facets and the build order's list only named five. See
 
 ## package store
 
-_(M3 — pending)_
+_(M3 — all 11 files: store.go, listings.go, clusters.go, facets.go,
+overrides.go, brands.go, reference.go, queue.go, content.go, community.go,
+golden.go)_
+
+```
+func AppendFixture(dir string, clusterID uuid.UUID, source string, raw GoldenRaw, expect map[string]any, regressionNote string) error
+type ClusterFilter struct {
+type GoldenFixture struct {
+type GoldenRaw struct {
+type QueueFilter struct {
+type Store struct {
+func New(ctx context.Context, databaseURL string) (*Store, error)
+func (s *Store) AccountByHandle(ctx context.Context, handle string) (*domain.Account, error)
+func (s *Store) AccountByID(ctx context.Context, id uuid.UUID) (*domain.Account, error)
+func (s *Store) Approve(ctx context.Context, slug string) error
+func (s *Store) BrandBySlug(ctx context.Context, slug string) (*domain.Brand, error)
+func (s *Store) Close()
+func (s *Store) ClusterByID(ctx context.Context, id uuid.UUID) (*domain.ProductCluster, error)
+func (s *Store) CommentsForCluster(ctx context.Context, clusterID uuid.UUID, limit, offset int) ([]domain.Comment, error)
+func (s *Store) CommentsForPost(ctx context.Context, postID uuid.UUID, limit, offset int) ([]domain.Comment, error)
+func (s *Store) CreateAccount(ctx context.Context, handle, passwordHash string) (*domain.Account, error)
+func (s *Store) CreateComment(ctx context.Context, c domain.Comment) (*domain.Comment, error)
+func (s *Store) CreateRefreshToken(ctx context.Context, t domain.RefreshToken) error
+func (s *Store) DeleteComment(ctx context.Context, id uuid.UUID, requestingAccountID *uuid.UUID, byAdmin bool) error
+func (s *Store) DocBySlug(ctx context.Context, kind domain.ContentKind, slug, locale string) (*domain.ContentDoc, *domain.ContentRevision, error)
+func (s *Store) Enqueue(ctx context.Context, item domain.ReviewQueueItem) (uuid.UUID, error)
+func (s *Store) FacetsFor(ctx context.Context, clusterID uuid.UUID) ([]domain.ProductFacet, error)
+func (s *Store) ListAggregators(ctx context.Context) ([]domain.Aggregator, error)
+func (s *Store) ListBrands(ctx context.Context) ([]domain.Brand, error)
+func (s *Store) ListClusters(ctx context.Context, f ClusterFilter) ([]domain.ProductCluster, error)
+func (s *Store) ListQueue(ctx context.Context, f QueueFilter) ([]domain.ReviewQueueItem, error)
+func (s *Store) ListROA(ctx context.Context) ([]domain.ROAMethod, error)
+func (s *Store) ListStates(ctx context.Context) ([]domain.State, error)
+func (s *Store) ListingsForCluster(ctx context.Context, clusterID uuid.UUID) ([]domain.ProductListing, error)
+func (s *Store) Merge(ctx context.Context, oldID, newID uuid.UUID) error
+func (s *Store) NewRevision(ctx context.Context, r domain.ContentRevision) (uuid.UUID, error)
+func (s *Store) OverridesFor(ctx context.Context, clusterID uuid.UUID) ([]domain.ProductFacetOverride, error)
+func (s *Store) Publish(ctx context.Context, docID, revisionID uuid.UUID) error
+func (s *Store) PublishedDocs(ctx context.Context, kind domain.ContentKind, locale string) ([]domain.ContentDoc, error)
+func (s *Store) RefreshTokenByHash(ctx context.Context, tokenHash string) (*domain.RefreshToken, error)
+func (s *Store) Resolve(ctx context.Context, id uuid.UUID, status domain.ReviewStatus, resolvedBy string) error
+func (s *Store) RevokeRefreshToken(ctx context.Context, tokenHash string) error
+func (s *Store) SetOverride(ctx context.Context, o domain.ProductFacetOverride) error
+func (s *Store) TouchLastSeen(ctx context.Context, accountID uuid.UUID) error
+func (s *Store) UpsertFacets(ctx context.Context, facets []domain.ProductFacet) error
+func (s *Store) UpsertListing(ctx context.Context, l domain.ProductListing) (uuid.UUID, error)
+```
+
+Note: `domain.State`/`domain.Aggregator` gained a `Stale bool` field during
+this milestone — M0's first pass omitted it despite the self-correcting
+reference-content design needing it. See `M3-DECISIONS.md`.
 
 ## package content
 

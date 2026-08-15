@@ -501,8 +501,14 @@ type State struct {
 	LinkStatus         LinkStatus
 	LinkCheckedAt      *time.Time
 	LinkFailures       int
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	// Stale is computed at query time, not stored — (last_verified +
+	// verify_interval_days) < now(). Added during M3's store layer: the
+	// prior alpha's reference.go handler computes and returns this field
+	// (03-DOMAIN-MODEL.md §7's "self-checking" reference content is what
+	// this powers), but M0's first pass at this struct omitted it.
+	Stale     bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // ROAMethod is one route-of-administration guide entry.
@@ -547,6 +553,7 @@ type Aggregator struct {
 	LinkStatus          LinkStatus
 	LinkCheckedAt       *time.Time
 	LinkFailures        int
+	Stale               bool // computed at query time, same as State.Stale — see its comment
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
 }
