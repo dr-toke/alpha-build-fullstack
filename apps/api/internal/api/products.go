@@ -266,6 +266,22 @@ func buildApiProduct(ctx context.Context, st *store.Store, c domain.ProductClust
 		basis = *c.PricePerMgBasis
 	}
 
+	// Interim direct hotlink of the raw scraped image — NOT the real answer
+	// (02-FRONTEND-CONTRACT.md §6: "Raw MinIO hostnames... proxy through
+	// /media/*" applies just as much to hotlinking a source store directly;
+	// the real fix is M6's fetch/transcode/hash pipeline, still pending).
+	// For a first live beta, showing the store's own product photo is a
+	// large, obvious improvement over every card reading "No image" — the
+	// data was already being scraped and stored (ProductListing.ImageURLRaw)
+	// and simply wasn't surfaced here. Flagged, not silently left broken.
+	var imageURL *string
+	for _, lr := range listingRows {
+		if lr.ImageURLRaw != nil && *lr.ImageURLRaw != "" {
+			imageURL = lr.ImageURLRaw
+			break
+		}
+	}
+
 	return ApiProduct{
 		ID:          c.ID.String(),
 		Name:        c.Name,
@@ -290,7 +306,7 @@ func buildApiProduct(ctx context.Context, st *store.Store, c domain.ProductClust
 		PricePerMgBasis:      basis,
 		BestListing:          best,
 		OtherListings:        others,
-		ImageURL:             nil, // no image pipeline yet (M6, pending)
+		ImageURL:             imageURL,
 		COAAvailable:         c.COAAvailable,
 		InStock:              inStock,
 		PrescriptionRequired: c.PrescriptionRequired,
