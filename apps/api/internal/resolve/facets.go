@@ -58,6 +58,35 @@ func classify(rs *CategoryRuleSet, name, description, rawCategory string) formDe
 	lowAll := lowName + " " + lowDesc
 	lowRawCategory := strings.ToLower(rawCategory)
 
+	// ── Apparel: exclusive, NAME or breadcrumb only, checked BEFORE pet ─────
+	// Checked first — found via a real full-catalog audit: "The Shaman's
+	// Pet ... T-Shirt" and "Poseidon's Pet Turtle ... T-Shirt" (two
+	// separate real listings, evidently a whole line of pet-themed graphic
+	// tees) were both landing as form="pet" and passing the publish gate,
+	// because "Pet" — a playful/creative brand-name word here, nothing to
+	// do with an actual pet product — matched pet_words_name_level before
+	// the apparel check for "t-shirt" ever ran. harvest/rules/categories.json
+	// documents both as "exclusive" and "checked before any form detection"
+	// but never specifies their relative order against EACH OTHER — this
+	// order was inherited, untested against this exact collision, from the
+	// prior alpha's control flow. Apparel words (t-shirt, hoodie, kurta...)
+	// are concrete physical-form descriptors, effectively never false
+	// positives; pet_words_name_level's list ("pet," "paw," "vet," a handful
+	// of animal names) is far more likely to appear inside an unrelated
+	// creative product name. A genuine pet-apparel product (e.g. a literal
+	// dog hoodie) would be the rare case this reorder could miscategorize,
+	// against two confirmed real instances of the opposite failure — not
+	// this store's actual "pet" category, which is CBD-for-pets oils/treats,
+	// not literal animal clothing.
+	if matched, spans := MatchWordBoundary(rs.ApparelWords, lowName); matched {
+		ev.Matched = append(ev.Matched, spans...)
+		return formDetection{primary: "apparel", evidence: ev}
+	}
+	if matched, spans := MatchWordBoundary(rs.ApparelWords, lowRawCategory); matched {
+		ev.Matched = append(ev.Matched, spans...)
+		return formDetection{primary: "apparel", evidence: ev}
+	}
+
 	// ── Pet: exclusive, NAME-first ──────────────────────────────────────────
 	if matched, spans := MatchWordBoundary(rs.PetWordsName, lowName); matched {
 		ev.Matched = append(ev.Matched, spans...)
@@ -73,16 +102,6 @@ func classify(rs *CategoryRuleSet, name, description, rawCategory string) formDe
 		ev.Matched = append(ev.Matched, spans...)
 		ev.Notes = append(ev.Notes, "pet: matched strong formulation-intent phrase in description")
 		return formDetection{primary: "pet", evidence: ev}
-	}
-
-	// ── Apparel: exclusive, NAME or breadcrumb only ─────────────────────────
-	if matched, spans := MatchWordBoundary(rs.ApparelWords, lowName); matched {
-		ev.Matched = append(ev.Matched, spans...)
-		return formDetection{primary: "apparel", evidence: ev}
-	}
-	if matched, spans := MatchWordBoundary(rs.ApparelWords, lowRawCategory); matched {
-		ev.Matched = append(ev.Matched, spans...)
-		return formDetection{primary: "apparel", evidence: ev}
 	}
 
 	// ── Form detection: NAME first, description fallback ────────────────────

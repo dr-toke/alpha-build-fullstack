@@ -1,0 +1,13 @@
+{
+  "source": "Full live cbdstore.in catalog audit, 2026-08-15 — real listings 'The Shaman's Pet Women's T-Shirt' and 'Poseidon's Pet Turtle Women's T-Shirt / Golden Yellow / S' were both landing as form=pet, purchasable=true, and appearing in the public 'pet' category filter.",
+  "raw": {
+    "title": "Poseidon's Pet Turtle Women's T-Shirt - Golden Yellow / S",
+    "description": "100% pure hemp fabric graphic tee."
+  },
+  "expect": {
+    "form": "apparel",
+    "purchasable": false,
+    "forbid_categories_legacy": ["pet"]
+  },
+  "regression_note": "'Pet' here is part of a creative/character product name ('Poseidon's Pet Turtle'), not an actual pet product — but pet_words_name_level's bare 'pet' substring used to be checked BEFORE apparel_words' unambiguous 't-shirt' match, so this real shirt was classified as a pet product and passed the publish gate as one. Apparel is now checked first (facets.go's classify()) specifically because of this real, confirmed failure — contrast with dog-mantra-pet-exclusive.json, where pet correctly wins because no apparel word is present at all."
+}
