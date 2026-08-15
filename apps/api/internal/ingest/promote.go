@@ -89,7 +89,7 @@ func promoteOne(ctx context.Context, st *store.Store, rs *resolve.RuleSet, crs *
 	// first-time block, which is all ADR-020's narrow build currently
 	// produces, has no cluster to hide yet, so it's simplest and correct to
 	// just not create one.
-	check := compliance.Evaluate(crs, p.Name, p.CategoryRaw)
+	check := compliance.Evaluate(crs, p.Name, p.Description, p.CategoryRaw)
 	if !check.Pass {
 		return false, nil
 	}

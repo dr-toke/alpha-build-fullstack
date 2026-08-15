@@ -89,7 +89,7 @@ func TestScrapeAndClassifyLiveCBDStore(t *testing.T) {
 		// TestEvaluateRealServiceListing), which is why Evaluate checks
 		// CategoryRaw too — Shopify's product_type for that listing is
 		// literally "Doctors Consultation".
-		if !compliance.Evaluate(crs, p.Name, p.CategoryRaw).Pass {
+		if !compliance.Evaluate(crs, p.Name, p.Description, p.CategoryRaw).Pass {
 			serviceListings++
 		}
 
