@@ -57,7 +57,7 @@ func (s *Store) scanCluster(ctx context.Context, id uuid.UUID) (*domain.ProductC
 }
 
 const clusterSelectColumns = `
-	SELECT id, brand_id, name, short_description,
+	SELECT id, fingerprint, brand_id, name, short_description,
 	       cbd_mg, thc_mg, total_cannabinoids_mg, concentration_type,
 	       cannabinoid_confidence, cannabinoid_evidence,
 	       volume_ml, weight_g,
@@ -71,7 +71,7 @@ const clusterSelectColumns = `
 // so the two never drift out of sync silently.
 func clusterScanTargets(c *domain.ProductCluster) []any {
 	return []any{
-		&c.ID, &c.BrandID, &c.Name, &c.ShortDescription,
+		&c.ID, &c.Fingerprint, &c.BrandID, &c.Name, &c.ShortDescription,
 		&c.CBDMg, &c.THCMg, &c.TotalCannabinoidsMg, &c.ConcentrationType,
 		&c.CannabinoidConfidence, &c.CannabinoidEvidence,
 		&c.VolumeML, &c.WeightG,
@@ -80,6 +80,94 @@ func clusterScanTargets(c *domain.ProductCluster) []any {
 		&c.ImageID, &c.COAAvailable, &c.PrescriptionRequired, &c.Publishable,
 		&c.FirstSeenAt, &c.UpdatedAt, &c.CreatedAt,
 	}
+}
+
+// CreateCluster inserts a new product_clusters row and returns its durable
+// UUID — the identity 03-DOMAIN-MODEL.md §4 says is "assigned on first
+// sight... never a recomputed hash," which is exactly why this is a plain
+// INSERT, not an upsert: internal/db/migrations/008 deliberately leaves
+// `fingerprint` without a UNIQUE constraint (a merged-away cluster keeps its
+// old fingerprint forever), so "does a live cluster with this fingerprint
+// already exist" is ClusterByFingerprint's job, called BEFORE this by
+// internal/ingest's AssignCluster — this function never checks itself.
+func (s *Store) CreateCluster(ctx context.Context, c domain.ProductCluster) (uuid.UUID, error) {
+	const q = `
+		INSERT INTO product_clusters
+			(fingerprint, brand_id, name, short_description,
+			 cbd_mg, thc_mg, total_cannabinoids_mg, concentration_type,
+			 cannabinoid_confidence, cannabinoid_evidence,
+			 volume_ml, weight_g,
+			 best_price_paise, best_price_per_mg, cbd_price_per_mg, thc_price_per_mg,
+			 price_per_mg_basis, value_tier, rank_score,
+			 image_id, coa_available, prescription_required, publishable)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+		RETURNING id`
+
+	// cannabinoid_evidence is NOT NULL jsonb — same nil-map bug class as
+	// facets.go's UpsertFacets and content.go's NewRevision; fixed here on
+	// first write rather than waiting to hit it live a third time.
+	evidence := c.CannabinoidEvidence
+	if evidence == nil {
+		evidence = map[string]any{}
+	}
+
+	var id uuid.UUID
+	err := s.Pool.QueryRow(ctx, q,
+		c.Fingerprint, c.BrandID, c.Name, c.ShortDescription,
+		c.CBDMg, c.THCMg, c.TotalCannabinoidsMg, c.ConcentrationType,
+		c.CannabinoidConfidence, evidence,
+		c.VolumeML, c.WeightG,
+		c.BestPricePaise, c.BestPricePerMg, c.CBDPricePerMg, c.THCPricePerMg,
+		c.PricePerMgBasis, c.ValueTier, c.RankScore,
+		c.ImageID, c.COAAvailable, c.PrescriptionRequired, c.Publishable,
+	).Scan(&id)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("store.CreateCluster: %w", err)
+	}
+	return id, nil
+}
+
+// ClusterByFingerprint looks up a LIVE cluster by its dedup key
+// (harvest/rules/dedup.md) — internal/ingest's AssignCluster calls this
+// before CreateCluster to decide new-vs-existing. "Live" excludes any
+// cluster_merges.old_id: a merged-away row keeps its fingerprint forever
+// (see migrations/008's own comment), so a fresh product landing on that
+// same fingerprint must resolve to the cluster it was merged INTO, not the
+// stale row. Returns domain.ErrNotFound (not ClusterMovedError — that's
+// ClusterByID's public-URL contract, not this internal lookup's) when no
+// live cluster carries the fingerprint yet.
+func (s *Store) ClusterByFingerprint(ctx context.Context, fingerprint string) (*domain.ProductCluster, error) {
+	var id uuid.UUID
+	err := s.Pool.QueryRow(ctx,
+		`SELECT id FROM product_clusters WHERE fingerprint = $1 ORDER BY created_at DESC LIMIT 1`,
+		fingerprint,
+	).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("store.ClusterByFingerprint: %w", domain.ErrNotFound)
+		}
+		return nil, fmt.Errorf("store.ClusterByFingerprint: %w", err)
+	}
+
+	// Follow a merge exactly like ClusterByID does — needed here specifically
+	// because the row this fingerprint is stamped on may be the OLD,
+	// merged-away one (it keeps its fingerprint forever, migrations/008's own
+	// comment), so the fingerprint alone can point at a dead row.
+	var newID uuid.UUID
+	mergeErr := s.Pool.QueryRow(ctx,
+		`SELECT new_id FROM cluster_merges WHERE old_id = $1`, id,
+	).Scan(&newID)
+	if mergeErr == nil {
+		id = newID
+	} else if !errors.Is(mergeErr, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("store.ClusterByFingerprint: checking cluster_merges: %w", mergeErr)
+	}
+
+	c, err := s.scanCluster(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("store.ClusterByFingerprint: %w", err)
+	}
+	return c, nil
 }
 
 // ClusterFilter scopes ListClusters. Deliberately minimal for M3 — full

@@ -58,6 +58,64 @@ func TestClusterByID(t *testing.T) {
 	})
 }
 
+func TestCreateClusterAndByFingerprint(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("create then find by fingerprint", func(t *testing.T) {
+		fp := "fp-" + randSuffix()
+		id, err := testStore.CreateCluster(ctx, domain.ProductCluster{
+			Fingerprint:       &fp,
+			Name:              "Fingerprint Findable " + randSuffix(),
+			ConcentrationType: domain.ConcentrationUnknown,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		c, err := testStore.ClusterByFingerprint(ctx, fp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.ID != id {
+			t.Errorf("got id=%s, want %s", c.ID, id)
+		}
+		if c.Fingerprint == nil || *c.Fingerprint != fp {
+			t.Errorf("got fingerprint=%v, want %s", c.Fingerprint, fp)
+		}
+	})
+
+	t.Run("unknown fingerprint returns ErrNotFound", func(t *testing.T) {
+		_, err := testStore.ClusterByFingerprint(ctx, "fp-never-"+randSuffix())
+		if !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("got %v, want domain.ErrNotFound", err)
+		}
+	})
+
+	t.Run("a merged-away cluster's fingerprint resolves to the live cluster", func(t *testing.T) {
+		fp := "fp-merge-" + randSuffix()
+		oldID, err := testStore.CreateCluster(ctx, domain.ProductCluster{
+			Fingerprint:       &fp,
+			Name:              "Stale " + randSuffix(),
+			ConcentrationType: domain.ConcentrationUnknown,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		newID := mustCluster(t, "Live")
+		if err := testStore.Merge(ctx, oldID, newID); err != nil {
+			t.Fatal(err)
+		}
+
+		c, err := testStore.ClusterByFingerprint(ctx, fp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.ID != newID {
+			t.Errorf("got id=%s, want live cluster %s (not the merged-away %s)", c.ID, newID, oldID)
+		}
+	})
+}
+
 func TestMerge(t *testing.T) {
 	ctx := context.Background()
 
