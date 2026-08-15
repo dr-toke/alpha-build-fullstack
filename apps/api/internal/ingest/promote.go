@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/dr-toke/api/internal/compliance"
 	"github.com/dr-toke/api/internal/domain"
@@ -116,6 +117,26 @@ func promoteOne(ctx context.Context, st *store.Store, rs *resolve.RuleSet, crs *
 	}
 	publishable := resolve.Publishable(purchasableBool, form.Confidence, routeForGate, pricePaise)
 
+	// Found by a full live-catalog audit: 03-DOMAIN-MODEL.md §2's Publishable
+	// formula correctly never requires cannabinoid presence — legitimate
+	// hemp_seed/nutrition items (hemp protein powder, hemp seed oil) have no
+	// cbd/thc either, and must stay publishable. But applied to cbdstore.in's
+	// actual broad "wellness marketplace" inventory (not a narrow
+	// cannabis-only catalog), that same permissiveness let concentration_
+	// type=unknown products with NO cannabis signal AT ALL through too —
+	// ordinary Ayurvedic chai, a mushroom-extract supplement, a yoga wheel —
+	// because their generic form-word matches ("tea", "extract", "massage")
+	// carry no cannabis-specific meaning on their own. Scoped tightly:
+	// ONLY concentration_type=unknown is affected (real cbd/thc content and
+	// hemp_seed/nutrition typing are untouched), and it only excludes
+	// listings with NO cannabis-context word anywhere in name+description —
+	// a real cannabis product from a CBD-focused store almost always
+	// mentions cbd/thc/cannabis/cannabinoid/vijaya/full or broad spectrum
+	// somewhere in its own marketing copy.
+	if publishable && cb.ConcentrationType == domain.ConcentrationUnknown && !hasCannabisContext(rs, p.Name, p.Description) {
+		publishable = false
+	}
+
 	brandID, brandTrust, err := resolveBrand(ctx, st, p.BrandRaw)
 	if err != nil {
 		return false, fmt.Errorf("brand lookup: %w", err)
@@ -170,6 +191,16 @@ func promoteOne(ctx context.Context, st *store.Store, rs *resolve.RuleSet, crs *
 	}
 
 	return true, nil
+}
+
+// hasCannabisContext reports whether name/description mentions cannabis at
+// all — reuses harvest/rules/categories.json's cannabinoid_context_words
+// list (cbd/thc/vijaya/cannabinoid/cannabidiol/full spectrum/broad
+// spectrum), the same word list resolve's own nutrition-fallback branch
+// already uses internally, not a new pattern invented here.
+func hasCannabisContext(rs *resolve.RuleSet, name, description string) bool {
+	matched, _ := resolve.MatchWordBoundary(rs.Categories.CannabinoidContext, strings.ToLower(name+" "+description))
+	return matched
 }
 
 // resolveBrand looks up a brand by slug, returning (nil, defaultTrust, nil)

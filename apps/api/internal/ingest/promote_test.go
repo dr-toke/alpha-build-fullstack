@@ -185,6 +185,52 @@ func TestPromote(t *testing.T) {
 		}
 	})
 
+	t.Run("a non-cannabis wellness item with zero cannabis context is not publishable", func(t *testing.T) {
+		batchID, err := st.CreateBatch(ctx, slug)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Real case from a live-catalog audit: an ordinary Ayurvedic tea,
+		// sold through cbdstore.in alongside real cannabis products, whose
+		// name/description never mentions cannabis at all. "tea" matching
+		// the generic beverage word list alone must not be enough to make
+		// this a publishable "cannabis product."
+		_, err = st.StageRawProduct(ctx, batchID, domain.RawProduct{
+			SourceSlug:  slug,
+			SourceURL:   "https://example.com/products/masala-chai?variant=1",
+			Name:        "Butterfly Ayurveda Masala Chai | Immunity Boosting Tea - 40 Tea Bags",
+			BrandRaw:    "butterfly-ayurveda",
+			PriceRaw:    "₹399.00",
+			Description: "A traditional spiced tea blend for daily wellness.",
+			CategoryRaw: "Tea",
+			RawData:     map[string]any{"in_stock": true},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.FinishBatch(ctx, batchID, 1); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := DecideGate(ctx, st, batchID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Promote(ctx, st, rs, crs, batchID); err != nil {
+			t.Fatal(err)
+		}
+
+		var publishable bool
+		row := st.Pool.QueryRow(ctx,
+			`SELECT pc.publishable FROM product_clusters pc
+			 JOIN product_listings pl ON pl.cluster_id = pc.id
+			 WHERE pl.source_url = 'https://example.com/products/masala-chai?variant=1'`)
+		if err := row.Scan(&publishable); err != nil {
+			t.Fatal(err)
+		}
+		if publishable {
+			t.Error("a chai product with no cannabis context at all should not be publishable")
+		}
+	})
+
 	t.Run("a pack-quantity listing gets no ₹/mg pricing instead of a wildly wrong one", func(t *testing.T) {
 		batchID, err := st.CreateBatch(ctx, slug)
 		if err != nil {
