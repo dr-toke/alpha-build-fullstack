@@ -315,6 +315,40 @@ func (s *Store) ListClusters(ctx context.Context, f ClusterFilter) ([]domain.Pro
 	return out, nil
 }
 
+// CountClusters returns how many clusters match f's filters — ignoring its
+// cursor/Limit fields entirely, since this is the envelope's "total": the
+// size of the whole filtered set, not the current page
+// (02-FRONTEND-CONTRACT.md §3's `{ data, page, limit, total, has_more }`).
+// Mirrors ListClusters' WHERE-clause construction (including SortValue's
+// rank_score IS NOT NULL) so total and the actual rows returned always
+// agree on what "matches the filter" means.
+func (s *Store) CountClusters(ctx context.Context, f ClusterFilter) (int, error) {
+	q := `SELECT count(*) FROM product_clusters WHERE 1=1`
+	args := []any{}
+	argN := 0
+	next := func(v any) string {
+		argN++
+		args = append(args, v)
+		return fmt.Sprintf("$%d", argN)
+	}
+
+	if f.PublishableOnly {
+		q += ` AND publishable = true`
+	}
+	if f.BrandID != nil {
+		q += ` AND brand_id = ` + next(*f.BrandID)
+	}
+	if f.Sort == SortValue {
+		q += ` AND rank_score IS NOT NULL`
+	}
+
+	var count int
+	if err := s.Pool.QueryRow(ctx, q, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("store.CountClusters: %w", err)
+	}
+	return count, nil
+}
+
 // Merge records that oldID's identity now lives at newID — 03-DOMAIN-MODEL.md
 // §4. Never guess: the caller (an admin action) supplies both IDs
 // explicitly; this function does not infer merge targets from similarity.
