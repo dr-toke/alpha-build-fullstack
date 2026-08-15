@@ -53,6 +53,24 @@ func (r CannabinoidExtraction) BestMG() float64 {
 	return r.TotalCannabinoidsMg
 }
 
+// ExtractSize returns the pack size implied by a listing's name+description
+// — volumeML for liquids, weightG for solids, whichever pattern matches
+// first (0 for the one that doesn't apply). NOT part of the harvested
+// CannabinoidExtraction — the prior alpha's ExtractCannabinoids computed
+// this internally (as `base`, below) purely to scale percent-based
+// cannabinoid figures and never returned it. Exported here as its own
+// function, NEW for M4/M5, because harvest/rules/dedup.md's Fingerprint
+// needs a volumeML input and nothing before this milestone exposed one —
+// reuses the exact same rs.Patterns["volume_ml"]/["weight_g"] this file
+// already loads and validates, rather than inventing a second extraction
+// path.
+func ExtractSize(rs *CannabinoidRuleSet, name, description string) (volumeML, weightG float64) {
+	combined := name + " " + description
+	volumeML = firstMatchFloat(rs.Patterns["volume_ml"], combined)
+	weightG = firstMatchFloat(rs.Patterns["weight_g"], combined)
+	return
+}
+
 // ExtractCannabinoids parses cannabinoid content from a listing's name and
 // description. Faithful port of the prior alpha's
 // internal/catalog/normaliser/cannabinoids.go — the control flow (branch
