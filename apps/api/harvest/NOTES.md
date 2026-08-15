@@ -7,6 +7,43 @@ dark-web threat-intel project that happens to share a name. Checked file
 contents before harvesting from either; worth a second look if anyone else
 picks this up and finds two "d-p"-adjacent repos in `~/Downloads`.
 
+## Update 2026-08-15: WooCommerce selectors confirmed stale, not yet fixed
+
+While building M4's ingest package (cbdstore.in only, per the scope decision
+below — this check was done before writing any WooCommerce code, to decide
+whether it was worth doing now; the answer was "defer," so nothing below is
+acted on yet, just recorded so the next pass doesn't have to re-discover it):
+
+**All three harvested WooCommerce stores have moved off the theme the
+original selectors were written against.** `curebydesign.in`,
+`magiccann.in`, and `itshemp.in` are now all running a theme called
+"Woodmart" — confirmed live, same theme on all three. The harvested
+selectors (`li.product`, `a.woocommerce-LoopProduct-link`,
+`a[href*='/product/']` as the listing-link fallback) don't match anything
+on the current pages.
+
+What DOES still work, confirmed against real fetched HTML:
+- Listing link: `a.product-image-link` (Woodmart's own class, present as
+  `wd-product-img-link product-image-link` on every product card on all
+  three sites) — has a real `href` to the product detail page.
+- **The underlying `/product/{slug}/` URL path is unchanged** — only the
+  surrounding CSS classes moved. `curebydesign.in` does redirect
+  `/shop/` → `/shop-all/` now (a 301), so the configured listing entry
+  point needs updating too, not just the selector.
+- Product detail page: `h1.product_title` (class list is now
+  `product_title entry-title wd-entities-title`, but a plain
+  `h1.product_title` selector still matches — Woodmart adds classes, it
+  doesn't rename the ones WooCommerce itself always outputs). Description:
+  `.woocommerce-product-details__short-description` still present.
+  `product_meta` class still present for SKU/brand-link extraction.
+
+**Recommendation for whoever builds `internal/ingest/woocommerce.go`:**
+prefer `a.product-image-link` as the primary listing selector with the old
+`a[href*='/product/']` kept as a fallback (URL-pattern-based selectors
+survive theme changes better than class-name-based ones — this whole
+finding is a live demonstration of why). Re-verify against all three sites
+again at that point; a theme can change again between now and then.
+
 ## Scope decision: cbdstore.in only for this pass
 
 Project owner's call: get a basic PoC running before harvesting all ~14

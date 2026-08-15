@@ -160,6 +160,10 @@ type QueueFilter struct {
 type Store struct {
 func New(ctx context.Context, databaseURL string) (*Store, error)
 func (s *Store) AccountByHandle(ctx context.Context, handle string) (*domain.Account, error)
+func (s *Store) CreateBatch(ctx context.Context, sourceSlug string) (uuid.UUID, error)
+func (s *Store) StageRawProduct(ctx context.Context, batchID uuid.UUID, p domain.RawProduct) (uuid.UUID, error)
+func (s *Store) FinishBatch(ctx context.Context, batchID uuid.UUID, productCount int) error
+func (s *Store) RawProductsForBatch(ctx context.Context, batchID uuid.UUID) ([]domain.RawProduct, error)
 func (s *Store) AccountByID(ctx context.Context, id uuid.UUID) (*domain.Account, error)
 func (s *Store) Approve(ctx context.Context, slug string) error
 func (s *Store) BrandBySlug(ctx context.Context, slug string) (*domain.Brand, error)
@@ -205,7 +209,28 @@ _(M6 — pending)_
 
 ## package ingest
 
-_(M7 — pending)_
+_(M4 — PARTIAL: adapter.go, spec.go, shopify.go, staging.go. NOT built:
+woocommerce.go, gate.go, gate_test.go, dedup.go, dedup_test.go — scope
+deliberately held at cbdstore.in/Shopify only, per project owner
+(2026-08-15). See M4-DECISIONS.md.)_
+
+```
+func LoadBatch(ctx context.Context, st *store.Store, batchID uuid.UUID) ([]domain.RawProduct, error)
+func LoadScraperSpec(dir string) (map[string]*ScraperSpec, error)
+func StageBatch(ctx context.Context, st *store.Store, adapter Adapter) (batchID uuid.UUID, count int, err error)
+type Adapter interface {
+type RawListing struct {
+type ScraperSpec struct {
+type Shopify struct {
+func NewShopify(spec *ScraperSpec, userAgent string, rateLimitMS int) *Shopify
+func (s *Shopify) ScrapeAll(ctx context.Context, onListing func(RawListing) error) error
+func (s *Shopify) Source() string
+```
+
+`internal/store` also gained `staging.go` this milestone (`CreateBatch`,
+`StageRawProduct`, `FinishBatch`, `RawProductsForBatch`) — see SYMBOLS.md's
+package store section and M4-DECISIONS.md for why it lives there and not in
+`internal/ingest` despite the file it supports being named `staging.go` too.
 
 ## package api
 
