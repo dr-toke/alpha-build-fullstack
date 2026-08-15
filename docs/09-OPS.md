@@ -131,6 +131,64 @@ Never committed. `.env.example` carries keys with empty values only.
 | Postgres 16 + MinIO | Same VPS or managed |
 | Admin | Same binary, bound to localhost / Tor only |
 
+This is the target topology. Until a VPS is bought, §5a below is the interim
+path — same binary, same env-var contract, no rework when moving to a VPS.
+
+---
+
+## 5a. Interim beta hosting (pre-VPS)
+
+For showing shareholders a working beta before buying a VPS. No Docker: Go
+compiles to one static binary, so a platform's native buildpack (Nixpacks)
+builds it the same way `go build` does locally — `apps/api/nixpacks.toml`
+tells it which of the monorepo's three `cmd/` binaries to build. This is the
+same bare-binary shape §5 already commits to for the VPS, not a different
+architecture to migrate away from later.
+
+**Railway** (recommended — simplest Go + managed Postgres combination):
+
+1. Create a project, add a **PostgreSQL** plugin — Railway provisions it and
+   exposes `DATABASE_URL` as a service variable automatically.
+2. Add a service from this GitHub repo. Set **Root Directory** to `apps/api`
+   (monorepo — Railway/Nixpacks otherwise has no way to know which `cmd/`
+   package is the API). It will find `nixpacks.toml` there and use its build/
+   start commands.
+3. Service variables to set:
+   - `DATABASE_URL` — reference the Postgres plugin's variable (don't
+     hand-copy it; referencing keeps it in sync if it ever rotates).
+   - `ALLOWED_ORIGIN` — the deployed Netlify URL, e.g.
+     `https://toke-v02.netlify.app`. CORS rejects everything else
+     (`internal/api/router.go`'s single-origin check).
+   - `PORT` — Railway injects this itself; the server already reads it
+     (`cmd/server/main.go`), no action needed.
+4. Run migrations against the new database — from a local machine, not
+   inside the container (Railway's Postgres plugin exposes a public
+   connection string in its dashboard for exactly this):
+   ```bash
+   goose -dir apps/api/internal/db/migrations postgres "<railway-database-url>" up
+   ```
+5. Deploy. `GET https://<service>.up.railway.app/healthz` should return
+   `{"status":"ok"}` once the build finishes.
+6. On the frontend (Netlify): set `VITE_API_URL` to the Railway service's
+   public URL, redeploy.
+
+**Render** (alternative): same shape — a **PostgreSQL** instance (free tier
+available) for `DATABASE_URL`, a **Web Service** pointed at this repo with
+**Root Directory** `apps/api`, Nixpacks auto-detected the same way, same
+three env vars, same `goose ... up` migration step run from a local machine
+against Render's external database URL.
+
+**Fly.io** (alternative): `fly launch` from `apps/api/` auto-detects Go via
+its own buildpacks (no Dockerfile needed here either); attach a Postgres
+app with `fly postgres create` and `fly postgres attach`; same env vars,
+same migration step.
+
+Whichever platform: the promotion pipeline (`internal/ingest.Promote`) isn't
+wired to a scheduler yet (no River job runner deployed this pass — see
+`SYMBOLS.md`'s ingest section) — running a scrape+promote cycle against the
+deployed database is a manual step for now, from a local machine pointed at
+the deployed `DATABASE_URL`, same as the migration command above.
+
 ---
 
 ## 6. Ground truth: verified brands

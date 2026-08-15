@@ -1,0 +1,16 @@
+# Build config for Nixpacks (Railway's default builder, also usable on
+# Render/Fly.io). No Dockerfile — 09-OPS.md §5's own deploy topology is
+# "VPS, single Go binary," and Go's static-binary compile makes Docker's
+# main benefit (packaging a dependency tree) moot for this specific
+# process. Nixpacks builds the same way `go build` does locally; this file
+# only exists because the repo is a monorepo and Nixpacks can't otherwise
+# guess which of cmd/server, cmd/worker, cmd/contentpull to build.
+#
+# Point the platform's "root directory" at apps/api; this file is picked
+# up automatically from there.
+
+[phases.build]
+cmds = ["go build -o bin/server ./cmd/server"]
+
+[start]
+cmd = "./bin/server"
