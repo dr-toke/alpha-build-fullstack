@@ -35,15 +35,22 @@ func Fingerprint(brandSlug, rawName string, volumeML, concentrationMG float64) s
 }
 
 // AssignCluster resolves one raw product to a durable cluster UUID —
-// check-then-create against the fingerprint, the application-level
+// check-then-upsert against the fingerprint, the application-level
 // invariant internal/db/migrations/008's own comment describes (fingerprint
 // is deliberately NOT a DB-unique column, since a merged-away cluster keeps
 // its old fingerprint forever).
 //
-// cluster is the fully-populated shell to insert IF this fingerprint is
-// new — by the time promote.go calls this, resolve's cannabinoid/facet/
-// price pipeline has already run, so AssignCluster only ever persists,
-// never computes.
+// On a fingerprint match, this REFRESHES the existing cluster's derived
+// fields (via UpdateClusterDerived) rather than just returning its ID
+// unchanged — 04-PIPELINE.md §1, verbatim: "the existing-cluster
+// (fingerprint match) branch must refresh all derived fields —
+// category/facets, cannabinoids, everything — not just bump last_seen_at
+// ... This is critical. Keep it." Without this, a classifier improvement
+// never reaches a product that was already clustered on a prior scrape.
+//
+// cluster is the fully-populated shell to write either way — by the time
+// promote.go calls this, resolve's cannabinoid/facet/price pipeline has
+// already run, so AssignCluster only ever persists, never computes.
 //
 // harvest/rules/dedup.md flags fuzzy/near-duplicate matching (JaroWinkler,
 // WithinPct) as dead code in the prior alpha — scaffolded, never wired in.
@@ -55,6 +62,9 @@ func Fingerprint(brandSlug, rawName string, volumeML, concentrationMG float64) s
 func AssignCluster(ctx context.Context, st *store.Store, fingerprint string, cluster domain.ProductCluster) (uuid.UUID, error) {
 	existing, err := st.ClusterByFingerprint(ctx, fingerprint)
 	if err == nil {
+		if err := st.UpdateClusterDerived(ctx, existing.ID, cluster); err != nil {
+			return uuid.Nil, fmt.Errorf("ingest.AssignCluster: refreshing existing cluster: %w", err)
+		}
 		return existing.ID, nil
 	}
 	if !errors.Is(err, domain.ErrNotFound) {

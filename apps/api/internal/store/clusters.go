@@ -127,6 +127,50 @@ func (s *Store) CreateCluster(ctx context.Context, c domain.ProductCluster) (uui
 	return id, nil
 }
 
+// UpdateClusterDerived overwrites every derived field on an EXISTING
+// cluster (found via ClusterByFingerprint) with freshly resolved values —
+// 04-PIPELINE.md §1's explicit, capitalised instruction: "the existing-
+// cluster (fingerprint match) branch must refresh all derived fields —
+// category/facets, cannabinoids, everything — not just bump last_seen_at
+// ... This is critical. Keep it." Does NOT touch fingerprint, id,
+// first_seen_at, or created_at — a re-scrape landing on the same
+// fingerprint is the same product seen again, not a new one.
+func (s *Store) UpdateClusterDerived(ctx context.Context, id uuid.UUID, c domain.ProductCluster) error {
+	const q = `
+		UPDATE product_clusters SET
+			brand_id = $2, name = $3, short_description = $4,
+			cbd_mg = $5, thc_mg = $6, total_cannabinoids_mg = $7, concentration_type = $8,
+			cannabinoid_confidence = $9, cannabinoid_evidence = $10,
+			volume_ml = $11, weight_g = $12,
+			best_price_paise = $13, best_price_per_mg = $14, cbd_price_per_mg = $15, thc_price_per_mg = $16,
+			price_per_mg_basis = $17, value_tier = $18, rank_score = $19,
+			image_id = $20, coa_available = $21, prescription_required = $22, publishable = $23,
+			updated_at = now()
+		WHERE id = $1`
+
+	evidence := c.CannabinoidEvidence
+	if evidence == nil {
+		evidence = map[string]any{}
+	}
+
+	tag, err := s.Pool.Exec(ctx, q, id,
+		c.BrandID, c.Name, c.ShortDescription,
+		c.CBDMg, c.THCMg, c.TotalCannabinoidsMg, c.ConcentrationType,
+		c.CannabinoidConfidence, evidence,
+		c.VolumeML, c.WeightG,
+		c.BestPricePaise, c.BestPricePerMg, c.CBDPricePerMg, c.THCPricePerMg,
+		c.PricePerMgBasis, c.ValueTier, c.RankScore,
+		c.ImageID, c.COAAvailable, c.PrescriptionRequired, c.Publishable,
+	)
+	if err != nil {
+		return fmt.Errorf("store.UpdateClusterDerived: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("store.UpdateClusterDerived(%s): %w", id, domain.ErrNotFound)
+	}
+	return nil
+}
+
 // ClusterByFingerprint looks up a LIVE cluster by its dedup key
 // (harvest/rules/dedup.md) — internal/ingest's AssignCluster calls this
 // before CreateCluster to decide new-vs-existing. "Live" excludes any

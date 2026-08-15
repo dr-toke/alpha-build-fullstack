@@ -99,6 +99,43 @@ func TestAssignCluster(t *testing.T) {
 		}
 	})
 
+	t.Run("a fingerprint match refreshes derived fields, not just returns the old ID (04-PIPELINE.md §1: critical)", func(t *testing.T) {
+		fp3 := Fingerprint("boheco", "Refreshable Product", 30, 500)
+		cbd := 500.0
+		firstID, err := AssignCluster(ctx, st, fp3, domain.ProductCluster{
+			Name:              "Refreshable Product v1",
+			ConcentrationType: domain.ConcentrationCBD,
+			CBDMg:             &cbd,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		newCBD := 750.0
+		secondID, err := AssignCluster(ctx, st, fp3, domain.ProductCluster{
+			Name:              "Refreshable Product v2 (reclassified)",
+			ConcentrationType: domain.ConcentrationCBD,
+			CBDMg:             &newCBD,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if firstID != secondID {
+			t.Fatalf("refresh created a new cluster (%s -> %s), want same ID reused", firstID, secondID)
+		}
+
+		got, err := st.ClusterByFingerprint(ctx, fp3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Name != "Refreshable Product v2 (reclassified)" {
+			t.Errorf("got name=%q, want the refreshed name — fields were not updated on a fingerprint match", got.Name)
+		}
+		if got.CBDMg == nil || *got.CBDMg != 750.0 {
+			t.Errorf("got cbd_mg=%v, want 750 — fields were not updated on a fingerprint match", got.CBDMg)
+		}
+	})
+
 	t.Run("a different fingerprint creates a distinct cluster", func(t *testing.T) {
 		fp2 := Fingerprint("boheco", "CBD Oil 1000mg", 30, 1000)
 		id1, err := AssignCluster(ctx, st, fp, shell)
