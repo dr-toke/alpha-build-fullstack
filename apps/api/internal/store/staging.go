@@ -2,10 +2,12 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/dr-toke/api/internal/domain"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // staging.go is a small addition beyond M3's original 11-file list
@@ -69,6 +71,77 @@ func (s *Store) FinishBatch(ctx context.Context, batchID uuid.UUID, productCount
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("store.FinishBatch(%s): %w", batchID, domain.ErrNotFound)
+	}
+	return nil
+}
+
+// BatchByID reads back one scrape_batches row — internal/ingest/gate.go
+// uses this to look up what a batch actually staged (source, product_count)
+// before deciding on it.
+func (s *Store) BatchByID(ctx context.Context, id uuid.UUID) (*domain.ScrapeBatch, error) {
+	const q = `
+		SELECT id, source_slug, started_at, finished_at, status,
+		       product_count, previous_product_count, null_field_pct,
+		       selector_hit_rate, price_median_shift, rejection_reason,
+		       decided_by, decided_at, created_at
+		FROM scrape_batches WHERE id = $1`
+	var b domain.ScrapeBatch
+	err := s.Pool.QueryRow(ctx, q, id).Scan(
+		&b.ID, &b.SourceSlug, &b.StartedAt, &b.FinishedAt, &b.Status,
+		&b.ProductCount, &b.PreviousProductCount, &b.NullFieldPct,
+		&b.SelectorHitRate, &b.PriceMedianShift, &b.RejectionReason,
+		&b.DecidedBy, &b.DecidedAt, &b.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("store.BatchByID: %w", domain.ErrNotFound)
+		}
+		return nil, fmt.Errorf("store.BatchByID: %w", err)
+	}
+	return &b, nil
+}
+
+// LastApprovedBatchCount returns the product_count of the most recently
+// approved batch for a source — ADR-010's baseline the gate compares a new
+// batch against. Returns nil, nil (not an error) when a source has never
+// had an approved batch yet — the gate's bootstrap case, not a failure.
+func (s *Store) LastApprovedBatchCount(ctx context.Context, sourceSlug string) (*int, error) {
+	var count *int
+	err := s.Pool.QueryRow(ctx,
+		`SELECT product_count FROM scrape_batches
+		 WHERE source_slug = $1 AND status = 'approved'
+		 ORDER BY decided_at DESC LIMIT 1`,
+		sourceSlug,
+	).Scan(&count)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("store.LastApprovedBatchCount: %w", err)
+	}
+	return count, nil
+}
+
+// DecideBatch records the promotion gate's outcome — ADR-010: rejection
+// "alerts and holds. It never overwrites." This function only ever moves a
+// batch OUT of pending_review into approved/rejected; it does not touch
+// raw_products or product_listings itself, so a rejected batch's staged
+// rows simply sit there, inert, for a human to inspect or re-run.
+func (s *Store) DecideBatch(ctx context.Context, batchID uuid.UUID, status domain.BatchStatus, previousCount *int, reason *string, decidedBy string) error {
+	if status != domain.BatchApproved && status != domain.BatchRejected {
+		return fmt.Errorf("store.DecideBatch: status must be approved or rejected, got %q", status)
+	}
+	tag, err := s.Pool.Exec(ctx,
+		`UPDATE scrape_batches
+		 SET status = $2, previous_product_count = $3, rejection_reason = $4,
+		     decided_by = $5, decided_at = now()
+		 WHERE id = $1 AND status = 'pending_review'`,
+		batchID, status, previousCount, reason, decidedBy)
+	if err != nil {
+		return fmt.Errorf("store.DecideBatch: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("store.DecideBatch(%s): %w", batchID, domain.ErrNotFound)
 	}
 	return nil
 }
