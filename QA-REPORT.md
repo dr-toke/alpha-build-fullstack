@@ -128,10 +128,21 @@ Nothing outstanding — homepage/nav, all product filters/sort/pagination,
 product detail pages (including edge cases), all other routes, API-level
 checks, and mobile/responsive were all covered this pass.
 
-## Deploy status
+## Deploy status — all live and verified
 
-- Backend fix (Nutrition/value-sort) needs a Railway redeploy to take
-  effect in production (code change, not yet pushed at time of writing this
-  report — see final summary message for current status).
-- Brand-linkage repair was applied directly against Railway's live database
-  (data fix, no redeploy needed for that half — it's already live).
+- Backend redeployed to Railway (`railway up --path-as-root .`, Railpack
+  builder, `go build ./cmd/server`) — `healthz` returns `{"status":"ok"}`.
+- Frontend pushed to `main`, picked up by the user's own Netlify
+  auto-deploy (no CLI/manual step needed on this side).
+- Live-verified post-deploy, against production, not staging:
+  - `GET /api/products?category=nutrition` → 64 products (was 0).
+  - `GET /api/products?brand=cure-by-design` → 74 products with
+    `ayush: true, fssai: true` correctly populated (was 0 products, and
+    every brand showed unverified/no-Ayush/no-FSSAI before the repair).
+  - `/products?category=nutrition` on the live site renders "64 products".
+  - `/product?id=...` price block on a 390px viewport: `₹/mg` content now
+    stays inside the card, no more clipping past the viewport edge.
+  - `/products` grid at 390px: no horizontal page overflow
+    (`scrollWidth === clientWidth`).
+  - Full route smoke test (`/`, `/products`, `/history`, `/science`,
+    `/legality`, `/brands`, `/compare`, `/forum`, `/survey`) — all 200.
