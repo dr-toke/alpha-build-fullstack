@@ -53,7 +53,7 @@ func Resolve(clusterID uuid.UUID, facet domain.Facet, in FacetInputs, classifier
 			Value:             in.Rule.Value,
 			Source:            domain.FacetSourceRule,
 			Confidence:        in.Rule.Confidence,
-			Evidence:          evidenceToMap(in.Rule.Evidence),
+			Evidence:          EvidenceToMap(in.Rule.Evidence),
 			ClassifierVersion: classifierVersion,
 			DecidedAt:         now,
 		}
@@ -65,7 +65,7 @@ func Resolve(clusterID uuid.UUID, facet domain.Facet, in FacetInputs, classifier
 			Value:             in.Model.Value,
 			Source:            domain.FacetSourceModel,
 			Confidence:        in.Model.Confidence,
-			Evidence:          evidenceToMap(in.Model.Evidence),
+			Evidence:          EvidenceToMap(in.Model.Evidence),
 			ClassifierVersion: classifierVersion,
 			DecidedAt:         now,
 		}
@@ -77,7 +77,7 @@ func Resolve(clusterID uuid.UUID, facet domain.Facet, in FacetInputs, classifier
 			Value:             in.Default.Value,
 			Source:            domain.FacetSourceDefault,
 			Confidence:        in.Default.Confidence,
-			Evidence:          evidenceToMap(in.Default.Evidence),
+			Evidence:          EvidenceToMap(in.Default.Evidence),
 			ClassifierVersion: classifierVersion,
 			DecidedAt:         now,
 		}
@@ -85,7 +85,13 @@ func Resolve(clusterID uuid.UUID, facet domain.Facet, in FacetInputs, classifier
 	return nil
 }
 
-func evidenceToMap(ev Evidence) map[string]any {
+// EvidenceToMap converts Evidence into the map[string]any shape every jsonb
+// evidence/cannabinoid_evidence column expects. Exported (was
+// Resolve()-private until M4/M5) because internal/ingest's promote.go needs
+// the exact same conversion for domain.ProductCluster.CannabinoidEvidence —
+// one conversion function, not a second copy drifting out of sync with this
+// one.
+func EvidenceToMap(ev Evidence) map[string]any {
 	m := map[string]any{}
 	if len(ev.Matched) > 0 {
 		m["matched"] = ev.Matched
