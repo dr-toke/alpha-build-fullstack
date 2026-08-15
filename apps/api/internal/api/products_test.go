@@ -169,7 +169,7 @@ func TestListAndGetProducts(t *testing.T) {
 
 	router := NewRouter(st, "https://drtoke.in")
 
-	t.Run("GET /api/products returns the envelope with real promoted products", func(t *testing.T) {
+	t.Run("GET /api/products returns the real ProductListResponse shape with real promoted products", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/api/products?limit=10", nil)
 		router.ServeHTTP(w, req)
@@ -177,40 +177,37 @@ func TestListAndGetProducts(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("got status %d, body %s", w.Code, w.Body.String())
 		}
-		var env Envelope
-		if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil {
-			t.Fatalf("decode envelope: %v\nbody: %s", err, w.Body.String())
+		var resp ProductListResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v\nbody: %s", err, w.Body.String())
 		}
-		if env.Total < 2 {
-			t.Errorf("got total=%d, want at least 2", env.Total)
+		if resp.Total < 2 {
+			t.Errorf("got total=%d, want at least 2", resp.Total)
+		}
+		if len(resp.Products) < 2 {
+			t.Fatalf("got %d products, want at least 2", len(resp.Products))
 		}
 
-		var products []productPayload
-		raw, _ := json.Marshal(env.Data)
-		if err := json.Unmarshal(raw, &products); err != nil {
-			t.Fatalf("decode products: %v", err)
-		}
-		if len(products) < 2 {
-			t.Fatalf("got %d products, want at least 2", len(products))
-		}
 		found1, found2 := false, false
-		for _, p := range products {
-			if p.ID == id1 {
+		for _, p := range resp.Products {
+			if p.ID == id1.String() {
 				found1 = true
-				if p.Brand == nil || p.Brand.Slug != "boheco" {
+				if p.Brand.Slug != "boheco" {
 					t.Errorf("product %s: brand not populated correctly: %+v", id1, p.Brand)
 				}
-				if p.CBDMg == nil || *p.CBDMg != 500 {
-					t.Errorf("product %s: cbd_mg = %v, want 500", id1, p.CBDMg)
+				if p.Cannabinoids.CBDMg == nil || *p.Cannabinoids.CBDMg != 500 {
+					t.Errorf("product %s: cannabinoids.cbd_mg = %v, want 500", id1, p.Cannabinoids.CBDMg)
 				}
-				if p.BestPricePaise == nil || *p.BestPricePaise != 199900 {
-					t.Errorf("product %s: best_price_paise = %v, want 199900", id1, p.BestPricePaise)
+				if p.BestPriceINR == nil || *p.BestPriceINR != 1999.0 {
+					t.Errorf("product %s: best_price_inr = %v, want 1999.0 (rupees, not paise)", id1, p.BestPriceINR)
 				}
-				if len(p.Listings) != 1 {
-					t.Errorf("product %s: got %d listings, want 1", id1, len(p.Listings))
+				if p.BestListing == nil {
+					t.Errorf("product %s: best_listing is nil for an in-stock product", id1)
+				} else if p.BestListing.ListingID == "" {
+					t.Errorf("product %s: best_listing.listing_id is empty — BuyButton needs it for checkout", id1)
 				}
 			}
-			if p.ID == id2 {
+			if p.ID == id2.String() {
 				found2 = true
 			}
 		}
@@ -219,54 +216,50 @@ func TestListAndGetProducts(t *testing.T) {
 		}
 	})
 
-	t.Run("cursor pagination walks forward without repeating rows", func(t *testing.T) {
+	t.Run("page-based pagination walks forward without repeating rows", func(t *testing.T) {
 		w1 := httptest.NewRecorder()
-		router.ServeHTTP(w1, httptest.NewRequest(http.MethodGet, "/api/products?limit=1", nil))
-		var env1 Envelope
-		if err := json.Unmarshal(w1.Body.Bytes(), &env1); err != nil {
+		router.ServeHTTP(w1, httptest.NewRequest(http.MethodGet, "/api/products?limit=1&page=1&sort=new", nil))
+		var page1 ProductListResponse
+		if err := json.Unmarshal(w1.Body.Bytes(), &page1); err != nil {
 			t.Fatal(err)
 		}
-		if !env1.HasMore || env1.NextCursor == "" {
-			t.Fatalf("page 1: has_more=%v next_cursor=%q, want has_more=true and a cursor (2 products, limit 1)", env1.HasMore, env1.NextCursor)
-		}
-		var page1 []productPayload
-		raw, _ := json.Marshal(env1.Data)
-		_ = json.Unmarshal(raw, &page1)
 
 		w2 := httptest.NewRecorder()
-		router.ServeHTTP(w2, httptest.NewRequest(http.MethodGet, "/api/products?limit=1&cursor="+env1.NextCursor, nil))
-		var env2 Envelope
-		if err := json.Unmarshal(w2.Body.Bytes(), &env2); err != nil {
+		router.ServeHTTP(w2, httptest.NewRequest(http.MethodGet, "/api/products?limit=1&page=2&sort=new", nil))
+		var page2 ProductListResponse
+		if err := json.Unmarshal(w2.Body.Bytes(), &page2); err != nil {
 			t.Fatal(err)
 		}
-		var page2 []productPayload
-		raw2, _ := json.Marshal(env2.Data)
-		_ = json.Unmarshal(raw2, &page2)
 
-		if len(page1) != 1 || len(page2) != 1 {
-			t.Fatalf("got page1=%d page2=%d products, want 1 and 1", len(page1), len(page2))
+		if len(page1.Products) != 1 || len(page2.Products) != 1 {
+			t.Fatalf("got page1=%d page2=%d products, want 1 and 1", len(page1.Products), len(page2.Products))
 		}
-		if page1[0].ID == page2[0].ID {
+		if page1.Products[0].ID == page2.Products[0].ID {
 			t.Error("same product appeared on both pages")
+		}
+		if page1.Page != 1 || page2.Page != 2 {
+			t.Errorf("got page1.page=%d page2.page=%d, want 1 and 2", page1.Page, page2.Page)
 		}
 	})
 
-	t.Run("GET /api/products/{id} returns the full product", func(t *testing.T) {
+	t.Run("GET /api/products/{id} returns { product: ... }", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/products/"+id1.String(), nil))
 		if w.Code != http.StatusOK {
 			t.Fatalf("got status %d, body %s", w.Code, w.Body.String())
 		}
-		var p productPayload
-		if err := json.Unmarshal(w.Body.Bytes(), &p); err != nil {
+		var body struct {
+			Product ApiProduct `json:"product"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 			t.Fatal(err)
 		}
-		if p.ID != id1 {
-			t.Errorf("got id=%s, want %s", p.ID, id1)
+		if body.Product.ID != id1.String() {
+			t.Errorf("got id=%s, want %s", body.Product.ID, id1)
 		}
 	})
 
-	t.Run("GET /api/products/{id} on an unknown id is 404 not_found", func(t *testing.T) {
+	t.Run("GET /api/products/{id} on an unknown id is 404 with the real error shape", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/products/"+uuid.New().String(), nil))
 		if w.Code != http.StatusNotFound {
@@ -276,8 +269,8 @@ func TestListAndGetProducts(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 			t.Fatal(err)
 		}
-		if body.Error.Code != CodeNotFound {
-			t.Errorf("got code=%q, want %q", body.Error.Code, CodeNotFound)
+		if body.Error == "" {
+			t.Error("error message is empty")
 		}
 	})
 

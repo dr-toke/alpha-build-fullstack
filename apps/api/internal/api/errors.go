@@ -2,48 +2,34 @@ package api
 
 import "net/http"
 
-// Error codes — 02-FRONTEND-CONTRACT.md §3's exact stable set, so the
-// frontend's ApiError can branch on `error.code` rather than parsing
-// `error.message`. All nine are declared here even though this build's
-// handlers only ever emit a few of them — the vocabulary is the contract,
-// not just whatever this milestone happens to produce.
-const (
-	CodeNotFound         = "not_found"
-	CodeMoved            = "moved"
-	CodeRateLimited      = "rate_limited"
-	CodeUnavailable      = "unavailable"
-	CodeInvalidFilter    = "invalid_filter"
-	CodeAuthRequired     = "auth_required"
-	CodeAuthInvalid      = "auth_invalid"
-	CodeBanned           = "banned"
-	CodeValidationFailed = "validation_failed"
-)
-
+// errorBody is `{ "error": "<message>" }` — the ACTUAL shape
+// apps/web/src/lib/api/client.ts's apiFetch reads (`body?.error` as a
+// plain string, then `new ApiError(status, message)`). 02-FRONTEND-CONTRACT.md
+// §3 documents a richer `{ error: { code, message } }` envelope for stable
+// machine codes, but the shipped ApiError class has no `.code` field at
+// all — sending the object form would set ApiError's message to a
+// stringified object instead of readable text. HTTP status itself (404 vs
+// 503 vs 429 vs 400) is what the frontend actually branches on
+// (`ApiError.status`); see API-DECISIONS.md for the full reasoning on why
+// this deviates from the doc and matches the real client instead.
 type errorBody struct {
-	Error struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
+	Error string `json:"error"`
 }
 
-// WriteError writes 02-FRONTEND-CONTRACT.md §3's error envelope:
-// `{ "error": { "code", "message" } }`.
-func WriteError(w http.ResponseWriter, status int, code, message string) {
-	var body errorBody
-	body.Error.Code = code
-	body.Error.Message = message
-	WriteJSON(w, status, body)
+// WriteError writes the error envelope the frontend actually parses.
+func WriteError(w http.ResponseWriter, status int, message string) {
+	WriteJSON(w, status, errorBody{Error: message})
 }
 
 func writeNotFound(w http.ResponseWriter, message string) {
-	WriteError(w, http.StatusNotFound, CodeNotFound, message)
+	WriteError(w, http.StatusNotFound, message)
 }
 
 func writeInvalidFilter(w http.ResponseWriter, message string) {
-	WriteError(w, http.StatusBadRequest, CodeInvalidFilter, message)
+	WriteError(w, http.StatusBadRequest, message)
 }
 
 func writeUnavailable(w http.ResponseWriter, message string) {
 	w.Header().Set("Retry-After", "5")
-	WriteError(w, http.StatusServiceUnavailable, CodeUnavailable, message)
+	WriteError(w, http.StatusServiceUnavailable, message)
 }

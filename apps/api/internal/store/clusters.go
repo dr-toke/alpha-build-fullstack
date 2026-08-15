@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
+	"strings"
 
 	"github.com/dr-toke/api/internal/domain"
 	"github.com/google/uuid"
@@ -215,85 +215,199 @@ func (s *Store) ClusterByFingerprint(ctx context.Context, fingerprint string) (*
 	return c, nil
 }
 
-// ClusterFilter scopes ListClusters. Deliberately minimal for M3 — full
-// facet-filter query construction (?form=&route=&brand=&basis=, per
-// 05-API-REFERENCE.md §1) is internal/api's job once M5 defines the exact
-// param surface; this covers what's storage-layer-obvious now (publishable
-// gate, brand, keyset pagination on rank_score) rather than guessing ahead
-// of the handler that will actually call it. See M3-DECISIONS.md.
-// SortNew and SortValue are ClusterFilter.Sort's two modes —
-// 05-API-REFERENCE.md §1: "sort=value|price|new. Default new when no basis
-// given" and "sort=value without basis is misleading — ₹/mg-CBD and ₹/mg-THC
-// are not comparable. Hence the new default." price-basis-scoped sorting
-// (?basis=cbd|thc) is not implemented by this first pass — internal/api's
-// M8 build order names it as products.go's job; ListClusters only offers
-// the two source-of-truth orderings the store layer itself can support
-// without a basis parameter threading all the way down.
+// Sort modes — SortValue's composite rank_score by default, or scoped to
+// one cannabinoid's own ₹/mg column when Basis is set
+// (05-API-REFERENCE.md §1: "scopes the value sort" — ₹/mg-CBD and ₹/mg-THC
+// aren't comparable, so a basis-scoped sort orders by that specific column,
+// not the blended editorial rank_score). SortPrice added for the real
+// frontend's "Lowest price" option (CatalogGrid.svelte's SORTS list) —
+// 05-API-REFERENCE.md always named it but nothing implemented it until now.
 const (
 	SortNew   = "new"
 	SortValue = "value"
+	SortPrice = "price"
 )
 
+// ClusterFilter scopes ListClusters/CountClusters. Matches the query
+// surface the real frontend (apps/web/src/lib/sections/products/
+// CatalogGrid.svelte) actually sends — category/extract/brand/basis/
+// verified/sort/page — not 05-API-REFERENCE.md's aspirational param list,
+// which was never reconciled against the frontend code already in the
+// repo. See API-DECISIONS.md.
 type ClusterFilter struct {
 	BrandID         *uuid.UUID
 	PublishableOnly bool
-	// Sort selects the ORDER BY; "" defaults to SortNew, matching the doc's
-	// stated default.
+	VerifiedOnly    bool
+	// Category is the LEGACY category vocabulary (tincture/edible/topical/
+	// smokable/vapeable/extract/beverage/nutrition/pet) — never a stored
+	// column (internal/db/migrations/002: category is derived from facets
+	// at read time, "exactly one writer for facet-derived data"), so this
+	// is translated into a facet/concentration_type WHERE fragment by
+	// categoryWhereFragment, mirroring resolve.LegacyCategory's own
+	// mapping exactly rather than approximating it.
+	Category string
+	// Extract is the real `extract` facet value — filtered directly
+	// against product_facets, no derivation needed.
+	Extract string
+	// Basis scopes SortValue to cbd_price_per_mg or thc_price_per_mg
+	// instead of the composite rank_score. "" | "cbd" | "thc".
+	Basis string
+	// Sort: SortNew (default) | SortValue | SortPrice.
 	Sort string
-	// Cursor fields — keyset pagination, never OFFSET
-	// (02-FRONTEND-CONTRACT.md §5). Which pair matters depends on Sort:
-	// CursorFirstSeenAt+CursorID for SortNew, CursorRankScore+CursorID for
-	// SortValue. All nil means "first page."
-	CursorFirstSeenAt *time.Time
-	CursorRankScore   *float64
-	CursorID          *uuid.UUID
-	Limit             int
+
+	// Page-based pagination (1-based) — the real frontend's actual model;
+	// CatalogGrid.svelte only ever moves ±1 page, never jumps arbitrarily,
+	// so plain OFFSET is the pragmatic choice at this catalogue's scale
+	// (thousands, not millions, of rows) despite 02-FRONTEND-CONTRACT.md
+	// §5's general "never OFFSET" guidance being the more scale-correct
+	// answer — see API-DECISIONS.md for the full reasoning. Page <= 0
+	// defaults to page 1.
+	Page  int
+	Limit int
 }
 
-// ListClusters returns clusters keyset-paginated in the mode f.Sort
-// requests. Stable tie-break on id ASC per 02-FRONTEND-CONTRACT.md §5 — "so
-// the grid doesn't reshuffle between loads" — in both modes.
+// buildWhere constructs the WHERE clause shared by ListClusters and
+// CountClusters — kept as one function specifically so the two queries can
+// never drift on what "matches the filter" means (a bug class M3's own
+// clusterSelectColumns/clusterScanTargets split already guards against for
+// column lists; this is the same discipline for filter predicates).
+func (f ClusterFilter) buildWhere(argN *int, args *[]any) string {
+	next := func(v any) string {
+		*argN++
+		*args = append(*args, v)
+		return fmt.Sprintf("$%d", *argN)
+	}
+
+	where := " WHERE 1=1"
+	if f.PublishableOnly {
+		where += " AND publishable = true"
+	}
+	if f.BrandID != nil {
+		where += " AND brand_id = " + next(*f.BrandID)
+	}
+	if f.VerifiedOnly {
+		where += " AND brand_id IN (SELECT id FROM brands WHERE verified = true)"
+	}
+	if f.Extract != "" {
+		where += " AND id IN (SELECT cluster_id FROM product_facets WHERE facet = 'extract' AND value = " + next(f.Extract) + ")"
+	}
+	if f.Category != "" {
+		if frag, ok := categoryWhereFragment(f.Category, next); ok {
+			where += " AND " + frag
+		} else {
+			// Unknown category slug — no results, not an error (same "valid
+			// filter, empty match" contract as an unknown brand slug in
+			// internal/api/products.go).
+			where += " AND false"
+		}
+	}
+
+	switch f.Sort {
+	case SortValue:
+		switch f.Basis {
+		case "cbd":
+			where += " AND cbd_price_per_mg IS NOT NULL"
+		case "thc":
+			where += " AND thc_price_per_mg IS NOT NULL"
+		default:
+			// rank_score may be NULL for un-ranked rows (e.g. hemp-seed
+			// oil, no computable ₹/mg) — excluded from this ordering
+			// entirely, "value" sort has nothing meaningful to say about
+			// them.
+			where += " AND rank_score IS NOT NULL"
+		}
+	case SortPrice:
+		where += " AND best_price_paise IS NOT NULL"
+	}
+	return where
+}
+
+// categoryWhereFragment reverse-maps resolve.LegacyCategory's mapping
+// (form + route + concentration_type -> legacy category) into SQL,
+// following that function's exact branches rather than approximating them —
+// see legacy.go's own doc comment for why form=concentrate and form=edible
+// each need the extra route/concentration_type check.
+func categoryWhereFragment(category string, next func(any) string) (string, bool) {
+	formIn := func(vals ...string) string {
+		placeholders := make([]string, len(vals))
+		for i, v := range vals {
+			placeholders[i] = next(v)
+		}
+		return "id IN (SELECT cluster_id FROM product_facets WHERE facet = 'form' AND value IN (" + strings.Join(placeholders, ",") + "))"
+	}
+	routeIs := func(v string) string {
+		return "id IN (SELECT cluster_id FROM product_facets WHERE facet = 'route' AND value = " + next(v) + ")"
+	}
+
+	switch category {
+	case "tincture":
+		return formIn("oil_tincture"), true
+	case "topical":
+		return formIn("topical"), true
+	case "smokable":
+		return formIn("flower"), true
+	case "beverage":
+		return formIn("beverage"), true
+	case "pet":
+		return formIn("pet"), true
+	case "vapeable":
+		return "(" + formIn("vape") + " OR (" + formIn("concentrate") + " AND NOT " + routeIs("oral") + "))", true
+	case "extract":
+		return "(" + formIn("concentrate") + " AND " + routeIs("oral") + ")", true
+	case "edible":
+		return "(" + formIn("capsule") + " OR (" + formIn("edible") + " AND concentration_type NOT IN ('hemp_seed','nutrition')))", true
+	case "nutrition":
+		return "(" + formIn("edible") + " AND concentration_type IN ('hemp_seed','nutrition'))", true
+	default:
+		return "", false
+	}
+}
+
+// orderByClause returns the ORDER BY matching f.Sort/f.Basis — always
+// tie-broken on id (ASC for SortNew's DESC-time order and SortValue/
+// SortPrice's DESC/ASC-value order alike) per 02-FRONTEND-CONTRACT.md §5:
+// "so the grid doesn't reshuffle between loads."
+func orderByClause(f ClusterFilter) string {
+	switch f.Sort {
+	case SortValue:
+		switch f.Basis {
+		case "cbd":
+			return " ORDER BY cbd_price_per_mg ASC, id ASC"
+		case "thc":
+			return " ORDER BY thc_price_per_mg ASC, id ASC"
+		default:
+			return " ORDER BY rank_score DESC, id ASC"
+		}
+	case SortPrice:
+		return " ORDER BY best_price_paise ASC, id ASC"
+	default:
+		return " ORDER BY first_seen_at DESC, id ASC"
+	}
+}
+
+// ListClusters returns clusters page-paginated (1-based f.Page, defaulting
+// to 1) and ordered per f.Sort/f.Basis.
 func (s *Store) ListClusters(ctx context.Context, f ClusterFilter) ([]domain.ProductCluster, error) {
 	limit := f.Limit
 	if limit <= 0 || limit > 100 {
 		limit = 24
 	}
+	page := f.Page
+	if page <= 0 {
+		page = 1
+	}
 
-	q := clusterSelectColumns + ` FROM product_clusters WHERE 1=1`
-	args := []any{}
 	argN := 0
-	next := func(v any) string {
-		argN++
-		args = append(args, v)
-		return fmt.Sprintf("$%d", argN)
-	}
+	var args []any
+	q := clusterSelectColumns + ` FROM product_clusters` + f.buildWhere(&argN, &args) + orderByClause(f)
 
-	if f.PublishableOnly {
-		q += ` AND publishable = true`
-	}
-	if f.BrandID != nil {
-		q += ` AND brand_id = ` + next(*f.BrandID)
-	}
-
-	if f.Sort == SortValue {
-		if f.CursorRankScore != nil && f.CursorID != nil {
-			rs := next(*f.CursorRankScore)
-			id := next(*f.CursorID)
-			q += fmt.Sprintf(` AND (rank_score, id) < (%s, %s)`, rs, id)
-		}
-		// rank_score may be NULL for un-ranked rows (e.g. a publishable
-		// product with no computable ₹/mg, like hemp-seed oil) — excluded
-		// from this ordering entirely rather than sorting NULLS LAST, since
-		// "value" sort has nothing meaningful to say about them.
-		q += ` AND rank_score IS NOT NULL ORDER BY rank_score DESC, id ASC LIMIT ` + next(limit)
-	} else {
-		if f.CursorFirstSeenAt != nil && f.CursorID != nil {
-			fs := next(*f.CursorFirstSeenAt)
-			id := next(*f.CursorID)
-			q += fmt.Sprintf(` AND (first_seen_at, id) < (%s, %s)`, fs, id)
-		}
-		q += ` ORDER BY first_seen_at DESC, id ASC LIMIT ` + next(limit)
-	}
+	argN++
+	args = append(args, limit)
+	limitPh := fmt.Sprintf("$%d", argN)
+	argN++
+	args = append(args, (page-1)*limit)
+	offsetPh := fmt.Sprintf("$%d", argN)
+	q += fmt.Sprintf(" LIMIT %s OFFSET %s", limitPh, offsetPh)
 
 	rows, err := s.Pool.Query(ctx, q, args...)
 	if err != nil {
@@ -315,32 +429,15 @@ func (s *Store) ListClusters(ctx context.Context, f ClusterFilter) ([]domain.Pro
 	return out, nil
 }
 
-// CountClusters returns how many clusters match f's filters — ignoring its
-// cursor/Limit fields entirely, since this is the envelope's "total": the
-// size of the whole filtered set, not the current page
-// (02-FRONTEND-CONTRACT.md §3's `{ data, page, limit, total, has_more }`).
-// Mirrors ListClusters' WHERE-clause construction (including SortValue's
-// rank_score IS NOT NULL) so total and the actual rows returned always
-// agree on what "matches the filter" means.
+// CountClusters returns how many clusters match f's filters — ignoring
+// Page/Limit entirely, since this is the envelope's "total": the size of
+// the whole filtered set, not the current page. Shares buildWhere with
+// ListClusters so total and the actual rows returned always agree on what
+// "matches the filter" means.
 func (s *Store) CountClusters(ctx context.Context, f ClusterFilter) (int, error) {
-	q := `SELECT count(*) FROM product_clusters WHERE 1=1`
-	args := []any{}
 	argN := 0
-	next := func(v any) string {
-		argN++
-		args = append(args, v)
-		return fmt.Sprintf("$%d", argN)
-	}
-
-	if f.PublishableOnly {
-		q += ` AND publishable = true`
-	}
-	if f.BrandID != nil {
-		q += ` AND brand_id = ` + next(*f.BrandID)
-	}
-	if f.Sort == SortValue {
-		q += ` AND rank_score IS NOT NULL`
-	}
+	var args []any
+	q := `SELECT count(*) FROM product_clusters` + f.buildWhere(&argN, &args)
 
 	var count int
 	if err := s.Pool.QueryRow(ctx, q, args...).Scan(&count); err != nil {
