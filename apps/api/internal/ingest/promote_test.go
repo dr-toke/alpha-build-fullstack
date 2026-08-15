@@ -291,6 +291,62 @@ func TestPromote(t *testing.T) {
 		}
 	})
 
+	t.Run("the general price_anomaly band catches per-serving dosing the pack-quantity pattern can't", func(t *testing.T) {
+		// Real case from a live-catalog audit AFTER the pack-quantity fix
+		// landed: "CitrusCBD Sublingual Spray | 1mg per spray" has no
+		// "(N units)" wording at all — the per-spray dose is stated a
+		// completely different way, so mgLikelyPerUnitUnreconciled can't
+		// catch it. But dividing a real bottle price by a 1mg per-spray
+		// figure produces the same class of nonsense (>₹1000/mg) — this is
+		// what the general 0.10-100 ₹/mg band exists to catch instead.
+		batchID, err := st.CreateBatch(ctx, slug)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = st.StageRawProduct(ctx, batchID, domain.RawProduct{
+			SourceSlug:  slug,
+			SourceURL:   "https://example.com/products/citruscbd-spray?variant=1",
+			Name:        "CitrusCBD Sublingual Spray Fast Absorption",
+			BrandRaw:    "boheco",
+			PriceRaw:    "₹1624.00",
+			Description: "CBD spray, 1mg per spray, fast-absorbing sublingual delivery.",
+			CategoryRaw: "Sprays",
+			RawData:     map[string]any{"in_stock": true},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.FinishBatch(ctx, batchID, 1); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := DecideGate(ctx, st, batchID); err != nil {
+			t.Fatal(err)
+		}
+		result, err := Promote(ctx, st, rs, crs, batchID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Promoted != 1 {
+			t.Fatalf("got Promoted=%d, want 1 (errors: %v)", result.Promoted, result.Errors)
+		}
+
+		var cbdMg, bestPerMg *float64
+		row := st.Pool.QueryRow(ctx,
+			`SELECT cbd_mg, best_price_per_mg
+			 FROM product_clusters pc
+			 JOIN product_listings pl ON pl.cluster_id = pc.id
+			 WHERE pl.source_url = 'https://example.com/products/citruscbd-spray?variant=1'`)
+		if err := row.Scan(&cbdMg, &bestPerMg); err != nil {
+			t.Fatal(err)
+		}
+		if cbdMg == nil || *cbdMg != 1 {
+			t.Fatalf("test premise broken: cbd_mg = %v, want 1 (need the extractor to actually find 1mg for this case to prove anything)", cbdMg)
+		}
+		if bestPerMg != nil {
+			t.Errorf("best_price_per_mg = %v, want nil — ₹1624/mg is far outside the 0.10-100 sane band and should have been suppressed", *bestPerMg)
+		}
+	})
+
 	t.Run("promoting a non-approved batch is rejected", func(t *testing.T) {
 		batchID, err := st.CreateBatch(ctx, slug)
 		if err != nil {

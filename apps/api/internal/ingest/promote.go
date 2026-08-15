@@ -235,6 +235,16 @@ func resolveBrand(ctx context.Context, st *store.Store, slug string) (*uuid.UUID
 // pass.
 const unverifiedBrandTrust = 0.7
 
+// priceAnomalyLowINRPerMg / priceAnomalyHighINRPerMg are
+// harvest/rules/compliance.json's own price_anomaly thresholds
+// (low_threshold_inr_per_mg / high_threshold_inr_per_mg), reused directly
+// rather than inventing new numbers — see buildClusterShell's price-anomaly
+// comment.
+const (
+	priceAnomalyLowINRPerMg  = 0.10
+	priceAnomalyHighINRPerMg = 100.0
+)
+
 // buildClusterShell assembles the fully-populated domain.ProductCluster
 // AssignCluster will either INSERT (new fingerprint) or use to overwrite an
 // existing row's derived fields (matched fingerprint) — see dedup.go's
@@ -264,6 +274,20 @@ func buildClusterShell(p domain.RawProduct, cb resolve.CannabinoidExtraction, vo
 		if basis != "" {
 			b := string(basis)
 			basisPtr = &b
+		}
+
+		// General safety net, layered on top of the specific "(N Capsules)"
+		// check above — a live-catalog audit after that fix landed found
+		// the SAME root cause (a per-serving/per-spray/per-drop dose priced
+		// as if it were the whole pack) surfacing under other phrasings
+		// ("1mg per spray" on a 30ml bottle, plain "Sublingual Drops" with
+		// no parenthetical count at all) that the narrow pattern doesn't
+		// and can't enumerate exhaustively. harvest/rules/compliance.json's
+		// own price_anomaly tier already specifies exactly this band
+		// (0.10-100 ₹/mg) as "anomalous, needs review" — reused here as a
+		// suppress-rather-than-guess gate, matching 04-PIPELINE.md §5.
+		if dominantPerMg != nil && (*dominantPerMg < priceAnomalyLowINRPerMg || *dominantPerMg > priceAnomalyHighINRPerMg) {
+			cbdPerMg, thcPerMg, totalPerMg, dominantPerMg, basisPtr, valueTier = nil, nil, nil, nil, nil, nil
 		}
 	}
 
