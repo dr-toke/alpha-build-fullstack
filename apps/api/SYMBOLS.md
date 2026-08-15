@@ -102,13 +102,22 @@ Sentinel errors in `var (...)`: `ErrNotFound`, `ErrValidationFailed`,
 ## package resolve
 
 _(M1 — the rule engine: text.go, evidence.go, ruleset.go, match.go,
-cannabinoids.go, facets.go, precedence.go, legacy.go, value.go)_
+cannabinoids.go, facets.go, precedence.go, legacy.go, value.go. `ExtractSize`
+and `ParsePriceINR` added later, M4/M5, when `internal/ingest/promote.go`
+needed a pack-size input for `Fingerprint` and a raw-string-to-paise
+conversion that didn't exist anywhere yet — see `M1-DECISIONS.md`'s scope vs.
+these two. `EvidenceToMap` was `precedence.go`-private until the same
+milestone, exported once `promote.go` needed the identical Evidence->jsonb
+conversion for `ProductCluster.CannabinoidEvidence`.)_
 
 ```
 func DominantPerMg(cbdPerMg, thcPerMg, totalPerMg *float64) (perMg *float64, basis domain.Basis)
+func EvidenceToMap(ev Evidence) map[string]any
+func ExtractSize(rs *CannabinoidRuleSet, name, description string) (volumeML, weightG float64)
 func LegacyCategories(category string, secondary []string) []string
 func LegacyCategory(form domain.FormValue, route domain.RouteValue, concentrationType domain.ConcentrationType) (category string, secondary []string)
 func Normalize(s string) string
+func ParsePriceINR(raw string) (int64, error)
 func PerMg(pricePaise int64, mg float64) *float64
 func Publishable(purchasable bool, formConfidence float32, route *domain.ProductFacet, pricePaise int64) bool
 func RankScore(valueScore, facetConfidence, brandTrust, completeness float64) float64
@@ -167,9 +176,18 @@ service_listing signal. See `M2-DECISIONS.md` / `ADR-020`.
 
 _(M3 — all 11 files: store.go, listings.go, clusters.go, facets.go,
 overrides.go, brands.go, reference.go, queue.go, content.go, community.go,
-golden.go)_
+golden.go. `staging.go` added M4 (`CreateBatch`, `StageRawProduct`,
+`FinishBatch`, `RawProductsForBatch`, plus `BatchByID`/
+`LastApprovedBatchCount`/`DecideBatch` added M5 for the promotion gate) —
+see M4-DECISIONS.md for why batch/staging SQL lives here and not in
+`internal/ingest` despite supporting a file of the same name there.
+`CreateCluster`/`UpdateClusterDerived`/`ClusterByFingerprint` and
+`ClusterFilter.Sort`/`CountClusters` added M4/M5 for dedup + the
+`sort=new` default API list needs. `BrandByID` added M5 — `product_
+clusters.brand_id` is a UUID FK, `BrandBySlug` alone can't serve it.)_
 
 ```
+const (
 func AppendFixture(dir string, clusterID uuid.UUID, source string, raw GoldenRaw, expect map[string]any, regressionNote string) error
 type ClusterFilter struct {
 type GoldenFixture struct {
@@ -178,24 +196,29 @@ type QueueFilter struct {
 type Store struct {
 func New(ctx context.Context, databaseURL string) (*Store, error)
 func (s *Store) AccountByHandle(ctx context.Context, handle string) (*domain.Account, error)
-func (s *Store) CreateBatch(ctx context.Context, sourceSlug string) (uuid.UUID, error)
-func (s *Store) StageRawProduct(ctx context.Context, batchID uuid.UUID, p domain.RawProduct) (uuid.UUID, error)
-func (s *Store) FinishBatch(ctx context.Context, batchID uuid.UUID, productCount int) error
-func (s *Store) RawProductsForBatch(ctx context.Context, batchID uuid.UUID) ([]domain.RawProduct, error)
 func (s *Store) AccountByID(ctx context.Context, id uuid.UUID) (*domain.Account, error)
 func (s *Store) Approve(ctx context.Context, slug string) error
+func (s *Store) BatchByID(ctx context.Context, id uuid.UUID) (*domain.ScrapeBatch, error)
+func (s *Store) BrandByID(ctx context.Context, id uuid.UUID) (*domain.Brand, error)
 func (s *Store) BrandBySlug(ctx context.Context, slug string) (*domain.Brand, error)
 func (s *Store) Close()
+func (s *Store) ClusterByFingerprint(ctx context.Context, fingerprint string) (*domain.ProductCluster, error)
 func (s *Store) ClusterByID(ctx context.Context, id uuid.UUID) (*domain.ProductCluster, error)
 func (s *Store) CommentsForCluster(ctx context.Context, clusterID uuid.UUID, limit, offset int) ([]domain.Comment, error)
 func (s *Store) CommentsForPost(ctx context.Context, postID uuid.UUID, limit, offset int) ([]domain.Comment, error)
+func (s *Store) CountClusters(ctx context.Context, f ClusterFilter) (int, error)
 func (s *Store) CreateAccount(ctx context.Context, handle, passwordHash string) (*domain.Account, error)
+func (s *Store) CreateBatch(ctx context.Context, sourceSlug string) (uuid.UUID, error)
+func (s *Store) CreateCluster(ctx context.Context, c domain.ProductCluster) (uuid.UUID, error)
 func (s *Store) CreateComment(ctx context.Context, c domain.Comment) (*domain.Comment, error)
 func (s *Store) CreateRefreshToken(ctx context.Context, t domain.RefreshToken) error
+func (s *Store) DecideBatch(ctx context.Context, batchID uuid.UUID, status domain.BatchStatus, previousCount *int, reason *string, decidedBy string) error
 func (s *Store) DeleteComment(ctx context.Context, id uuid.UUID, requestingAccountID *uuid.UUID, byAdmin bool) error
 func (s *Store) DocBySlug(ctx context.Context, kind domain.ContentKind, slug, locale string) (*domain.ContentDoc, *domain.ContentRevision, error)
 func (s *Store) Enqueue(ctx context.Context, item domain.ReviewQueueItem) (uuid.UUID, error)
 func (s *Store) FacetsFor(ctx context.Context, clusterID uuid.UUID) ([]domain.ProductFacet, error)
+func (s *Store) FinishBatch(ctx context.Context, batchID uuid.UUID, productCount int) error
+func (s *Store) LastApprovedBatchCount(ctx context.Context, sourceSlug string) (*int, error)
 func (s *Store) ListAggregators(ctx context.Context) ([]domain.Aggregator, error)
 func (s *Store) ListBrands(ctx context.Context) ([]domain.Brand, error)
 func (s *Store) ListClusters(ctx context.Context, f ClusterFilter) ([]domain.ProductCluster, error)
@@ -208,17 +231,25 @@ func (s *Store) NewRevision(ctx context.Context, r domain.ContentRevision) (uuid
 func (s *Store) OverridesFor(ctx context.Context, clusterID uuid.UUID) ([]domain.ProductFacetOverride, error)
 func (s *Store) Publish(ctx context.Context, docID, revisionID uuid.UUID) error
 func (s *Store) PublishedDocs(ctx context.Context, kind domain.ContentKind, locale string) ([]domain.ContentDoc, error)
+func (s *Store) RawProductsForBatch(ctx context.Context, batchID uuid.UUID) ([]domain.RawProduct, error)
 func (s *Store) RefreshTokenByHash(ctx context.Context, tokenHash string) (*domain.RefreshToken, error)
 func (s *Store) Resolve(ctx context.Context, id uuid.UUID, status domain.ReviewStatus, resolvedBy string) error
 func (s *Store) RevokeRefreshToken(ctx context.Context, tokenHash string) error
 func (s *Store) SetOverride(ctx context.Context, o domain.ProductFacetOverride) error
+func (s *Store) StageRawProduct(ctx context.Context, batchID uuid.UUID, p domain.RawProduct) (uuid.UUID, error)
 func (s *Store) TouchLastSeen(ctx context.Context, accountID uuid.UUID) error
+func (s *Store) UpdateClusterDerived(ctx context.Context, id uuid.UUID, c domain.ProductCluster) error
 func (s *Store) UpsertFacets(ctx context.Context, facets []domain.ProductFacet) error
 func (s *Store) UpsertListing(ctx context.Context, l domain.ProductListing) (uuid.UUID, error)
 ```
 
+`ClusterFilter.Sort` is `SortNew` (default, `first_seen_at DESC`) or
+`SortValue` (`rank_score DESC`, requires non-null rank_score) —
+05-API-REFERENCE.md §1's documented default, added when `internal/api`
+needed it; see `API-DECISIONS.md`.
+
 Note: `domain.State`/`domain.Aggregator` gained a `Stale bool` field during
-this milestone — M0's first pass omitted it despite the self-correcting
+M3 — M0's first pass omitted it despite the self-correcting
 reference-content design needing it. See `M3-DECISIONS.md`.
 
 ## package content
@@ -227,16 +258,23 @@ _(M6 — pending)_
 
 ## package ingest
 
-_(M4 — PARTIAL: adapter.go, spec.go, shopify.go, staging.go. NOT built:
-woocommerce.go, gate.go, gate_test.go, dedup.go, dedup_test.go — scope
+_(M4 — PARTIAL: adapter.go, spec.go, shopify.go, staging.go. `gate.go`,
+`dedup.go`, and `promote.go` added M5. NOT built: `woocommerce.go` — scope
 deliberately held at cbdstore.in/Shopify only, per project owner
 (2026-08-15). See M4-DECISIONS.md.)_
 
 ```
+func AssignCluster(ctx context.Context, st *store.Store, fingerprint string, cluster domain.ProductCluster) (uuid.UUID, error)
+func Fingerprint(brandSlug, rawName string, volumeML, concentrationMG float64) string
 func LoadBatch(ctx context.Context, st *store.Store, batchID uuid.UUID) ([]domain.RawProduct, error)
 func LoadScraperSpec(dir string) (map[string]*ScraperSpec, error)
 func StageBatch(ctx context.Context, st *store.Store, adapter Adapter) (batchID uuid.UUID, count int, err error)
 type Adapter interface {
+type GateDecision struct {
+func DecideGate(ctx context.Context, st *store.Store, batchID uuid.UUID) (GateDecision, error)
+func EvaluateGate(currentCount int, previousCount *int) GateDecision
+type PromoteResult struct {
+func Promote(ctx context.Context, st *store.Store, rs *resolve.RuleSet, crs *compliance.RuleSet, batchID uuid.UUID) (PromoteResult, error)
 type RawListing struct {
 type ScraperSpec struct {
 type Shopify struct {
@@ -245,11 +283,28 @@ func (s *Shopify) ScrapeAll(ctx context.Context, onListing func(RawListing) erro
 func (s *Shopify) Source() string
 ```
 
-`internal/store` also gained `staging.go` this milestone (`CreateBatch`,
-`StageRawProduct`, `FinishBatch`, `RawProductsForBatch`) — see SYMBOLS.md's
-package store section and M4-DECISIONS.md for why it lives there and not in
-`internal/ingest` despite the file it supports being named `staging.go` too.
+`EvaluateGate` implements one of 04-PIPELINE.md §2's four auto-reject
+thresholds (product-count drop >30%) — the other three need data nothing
+built so far computes. `Promote` is the full staging->live orchestration:
+compliance -> resolve -> dedup -> facets -> listing, in-process (no River
+job queue wired up yet). See gate.go/dedup.go/promote.go's own doc comments
+and this milestone's decisions notes.
 
 ## package api
 
-_(M8 — pending)_
+_(M5/M8 — PARTIAL first slice: envelope.go, errors.go, params.go,
+products.go, router.go, cmd/server/main.go. `GET /api/products` (list,
+`sort=new|value`, `brand` filter, keyset cursor) and `GET /api/products/{id}`
+(detail + `moved_to`) only — compare/brands/reference/community/admin/auth
+not built. See API-DECISIONS.md.)_
+
+```
+const (
+func NewRouter(st *store.Store, allowedOrigin string) http.Handler
+func WriteError(w http.ResponseWriter, status int, code, message string)
+func WriteJSON(w http.ResponseWriter, status int, v any)
+type Envelope struct {
+type Handlers struct {
+func (h *Handlers) GetProduct(w http.ResponseWriter, r *http.Request)
+func (h *Handlers) ListProducts(w http.ResponseWriter, r *http.Request)
+```
