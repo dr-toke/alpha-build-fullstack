@@ -243,10 +243,20 @@ func (s *Store) UpsertFacets(ctx context.Context, facets []domain.ProductFacet) 
 func (s *Store) UpsertListing(ctx context.Context, l domain.ProductListing) (uuid.UUID, error)
 ```
 
-`ClusterFilter.Sort` is `SortNew` (default, `first_seen_at DESC`) or
-`SortValue` (`rank_score DESC`, requires non-null rank_score) —
-05-API-REFERENCE.md §1's documented default, added when `internal/api`
-needed it; see `API-DECISIONS.md`.
+`ClusterFilter` matches the REAL frontend's filter surface
+(`apps/web/src/lib/sections/products/CatalogGrid.svelte`), not
+05-API-REFERENCE.md's aspirational one — reconciled after actually running
+the frontend against the backend surfaced the mismatch. `Sort` is
+`SortValue` (default, composite `rank_score DESC`, or scoped to
+`cbd_price_per_mg`/`thc_price_per_mg` via `Basis` when set), `SortNew`
+(`first_seen_at DESC`), or `SortPrice` (`best_price_paise ASC`).
+`Category` reverse-maps `resolve.LegacyCategory`'s exact branches into a
+facet/`concentration_type` SQL fragment; `Extract` and `VerifiedOnly`
+filter directly via `product_facets`/`brands` joins. Pagination is
+`Page`/`Limit` (1-based, plain OFFSET) — not keyset — because the shipped
+frontend only ever moves the page number ±1 and the catalogue is ~10k rows;
+see `API-DECISIONS.md` for the full reasoning (keyset remains the more
+correct answer at real scale).
 
 Note: `domain.State`/`domain.Aggregator` gained a `Stale bool` field during
 M3 — M0's first pass omitted it despite the self-correcting
@@ -294,17 +304,29 @@ and this milestone's decisions notes.
 
 _(M5/M8 — PARTIAL first slice: envelope.go, errors.go, params.go,
 products.go, router.go, cmd/server/main.go. `GET /api/products` (list,
-`sort=new|value`, `brand` filter, keyset cursor) and `GET /api/products/{id}`
-(detail + `moved_to`) only — compare/brands/reference/community/admin/auth
-not built. See API-DECISIONS.md.)_
+`category`/`extract`/`brand`/`basis`/`verified`/`sort`/`page`/`limit`) and
+`GET /api/products/{id}` (detail + `moved_to`) only —
+compare/brands/reference/community/admin/auth not built. Response shapes
+match `apps/web/src/lib/api/catalog.ts`'s `ApiProduct`/`ProductListResponse`
+exactly — NOT 05-API-REFERENCE.md's envelope, which was aspirational and
+never reconciled against the frontend code already in the repo until this
+was actually run end-to-end. See API-DECISIONS.md.)_
 
 ```
-const (
 func NewRouter(st *store.Store, allowedOrigin string) http.Handler
-func WriteError(w http.ResponseWriter, status int, code, message string)
+func WriteError(w http.ResponseWriter, status int, message string)
 func WriteJSON(w http.ResponseWriter, status int, v any)
-type Envelope struct {
+type ApiBrandSummary struct {
+type ApiCannabinoids struct {
+type ApiListing struct {
+type ApiProduct struct {
 type Handlers struct {
 func (h *Handlers) GetProduct(w http.ResponseWriter, r *http.Request)
 func (h *Handlers) ListProducts(w http.ResponseWriter, r *http.Request)
+type ProductListResponse struct {
 ```
+
+Error body is `{ "error": "<string>" }` — matches the shipped
+`ApiError`/`apiFetch` in `apps/web/src/lib/api/client.ts`, which has no
+`.code` field. HTTP status itself (404/503/429/400) is what the frontend
+branches on.
