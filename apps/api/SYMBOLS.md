@@ -145,6 +145,24 @@ facets.go — added because `03-DOMAIN-MODEL.md §2` lists `profile` as one of
 six facets and the build order's list only named five. See
 `M1-DECISIONS.md`.
 
+## package compliance
+
+_(M2 — NARROW EXCEPTION to the ADR-019 placeholder: only `service_listing`
+is implemented, per ADR-020. `hard_block`, `terminology_review`,
+`price_anomaly`, `unknown_brand` remain unbuilt.)_
+
+```
+type Result struct {
+type RuleSet struct {
+func LoadRuleSet(path string) (*RuleSet, error)
+func Evaluate(rs *RuleSet, name, category string) Result
+```
+
+`Evaluate` checks NAME per `harvest/rules/compliance.json`'s own
+documented scope, plus CATEGORY — a deviation from that doc found necessary
+by testing against a real live listing whose title alone didn't carry the
+service_listing signal. See `M2-DECISIONS.md` / `ADR-020`.
+
 ## package store
 
 _(M3 — all 11 files: store.go, listings.go, clusters.go, facets.go,

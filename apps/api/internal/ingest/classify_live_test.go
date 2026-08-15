@@ -3,10 +3,10 @@ package ingest
 import (
 	"context"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
+	"github.com/dr-toke/api/internal/compliance"
 	"github.com/dr-toke/api/internal/resolve"
 )
 
@@ -30,6 +30,10 @@ func TestScrapeAndClassifyLiveCBDStore(t *testing.T) {
 	rs, err := resolve.LoadRuleSet("../../harvest/rules")
 	if err != nil {
 		t.Fatalf("resolve.LoadRuleSet: %v", err)
+	}
+	crs, err := compliance.LoadRuleSet("../../harvest/rules/compliance.json")
+	if err != nil {
+		t.Fatalf("compliance.LoadRuleSet: %v", err)
 	}
 
 	specs, err := LoadScraperSpec("../../harvest/scrapers")
@@ -79,14 +83,13 @@ func TestScrapeAndClassifyLiveCBDStore(t *testing.T) {
 		if form.Confidence < 0.85 {
 			lowConfidence++
 		}
-		// The "Dr. Harshal Sawarkar" class of listing this whole
-		// conversation has been using as the example — this is what
-		// PROVES it's a real, present problem in the actual scraped
-		// sample, not a hypothetical. compliance.json's service_listing
-		// pattern isn't wired in yet (ADR-019 — M2 is a placeholder), so
-		// this counts it via the same word list, informationally, to show
-		// what compliance WILL catch once it exists.
-		if resolve.ResolveExtract(p.Name, p.Description).Ambiguous && looksLikeServiceListing(p.Name) {
+		// The REAL compliance check now (ADR-020) — not a heuristic. This
+		// is what caught the actual "Dr. Harshal Sawarkar" listing: its
+		// NAME alone doesn't match (see compliance_test.go's
+		// TestEvaluateRealServiceListing), which is why Evaluate checks
+		// CategoryRaw too — Shopify's product_type for that listing is
+		// literally "Doctors Consultation".
+		if !compliance.Evaluate(crs, p.Name, p.CategoryRaw).Pass {
 			serviceListings++
 		}
 
@@ -96,25 +99,13 @@ func TestScrapeAndClassifyLiveCBDStore(t *testing.T) {
 		}
 	}
 
-	t.Logf("summary: %d/%d have real cannabinoid content, %d/%d resolved a form, %d/%d below the 0.85 publish-gate confidence, %d look like service listings (compliance's future job, not resolve's)",
+	t.Logf("summary: %d/%d have real cannabinoid content, %d/%d resolved a form, %d/%d below the 0.85 publish-gate confidence, %d correctly caught as service listings by the REAL compliance.Evaluate (ADR-020)",
 		withCannabinoids, count, withForm, count, lowConfidence, count, serviceListings)
 
 	if withForm == 0 {
 		t.Error("zero listings resolved ANY form facet out of a real sample — the classifier is not working against live data")
 	}
-}
-
-// looksLikeServiceListing is NOT the real compliance check
-// (harvest/rules/compliance.json's service_listing pattern, which belongs
-// in internal/compliance, M2, not built) — a narrow, local approximation
-// just for this test's summary line, so the demo can show the problem is
-// real without reaching into a package that doesn't exist yet.
-func looksLikeServiceListing(name string) bool {
-	lower := strings.ToLower(name)
-	for _, kw := range []string{"dr.", "consultation", "therapist", "physician"} {
-		if strings.Contains(lower, kw) {
-			return true
-		}
+	if serviceListings == 0 {
+		t.Error("expected at least the known doctor-consultation listing to be caught in this sample — compliance.Evaluate may have regressed")
 	}
-	return false
 }

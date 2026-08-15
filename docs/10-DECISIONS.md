@@ -410,7 +410,45 @@ so the gap is visible in the pipeline, not hidden by its absence.
 
 ---
 
-## Superseded
+## ADR-020 — Narrow exception to ADR-019: `service_listing` filtering built now
+
+**Status:** accepted. Amends ADR-019, does not reverse it.
+
+**Decision:** `internal/compliance` gets exactly one piece of the five
+`harvest/rules/compliance.json` tiers implemented now — `service_listing`
+(retreats/workshops/consultations/etc., word-boundary matched). Everything
+else — `hard_block`, `terminology_review`, `price_anomaly`, `unknown_brand`
+— stays exactly as deferred by ADR-019. This is not "start M2 early," it's
+a scalpel cut of the single check needed to keep non-product listings out
+of the pipeline.
+
+**Why:** a real live scrape of `cbdstore.in` (M4) surfaced an actual
+doctor-consultation booking sitting in the product catalogue — not a
+hypothetical. Project owner's reaction was that leaving that visible in the
+pipeline even pre-live was unacceptable, and the fix was small, already
+harvested, and directly on point.
+
+**A real finding changed the implementation from what the doc says:**
+`harvest/rules/compliance.json` specifies `service_listing` as
+`"matched_against": "product NAME only"`. Tested against the actual
+motivating listing — its title contains none of the pattern's keywords at
+all. What DOES carry the signal, confirmed by fetching the live listing
+directly, is Shopify's `product_type` field ("Doctors Consultation"),
+already flowing through the pipeline as `RawListing.CategoryRaw` /
+`domain.RawProduct.CategoryRaw`. `compliance.Evaluate` checks both name and
+category now, not name alone — a deliberate, evidence-based deviation from
+the harvested doc, not a silent one. Whether name-only is right for other
+stores' data is an open question for the full M2 build, not resolved here.
+
+**Consequence:** `internal/compliance/filter.go` exists with a narrow
+`Evaluate(rs *RuleSet, name, category string) Result` signature — not the
+full `Evaluate(brandSlug, name, description string, priceINR, pricePMG
+float64) Result` shape the eventual complete filter will need. Widening
+that signature when the other four tiers get built is expected, normal
+evolution, not a design mistake now. Wired into
+`internal/ingest/classify_live_test.go`'s live demo, which now correctly
+flags real service listings in real scraped data instead of using a
+throwaway heuristic.
 
 | Was | Now | Where |
 |---|---|---|
