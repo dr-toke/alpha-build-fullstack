@@ -149,34 +149,70 @@ architecture to migrate away from later.
 
 1. Create a project, add a **PostgreSQL** plugin — Railway provisions it and
    exposes `DATABASE_URL` as a service variable automatically.
-2. Add a service from this GitHub repo. Set **Root Directory** to `apps/api`
+2. Add a service → **Deploy from GitHub repo** → `dr-toke/alpha-build-fullstack`.
+   It's private, so Railway needs its GitHub App granted access to it — if
+   the `dr-toke` org isn't already authorized, Railway's repo picker prompts
+   for that during this step (GitHub org owner has to approve it; a repo
+   collaborator alone usually can't). Set **Root Directory** to `apps/api`
    (monorepo — Railway/Nixpacks otherwise has no way to know which `cmd/`
    package is the API). It will find `nixpacks.toml` there and use its build/
    start commands.
 3. Service variables to set:
    - `DATABASE_URL` — reference the Postgres plugin's variable (don't
      hand-copy it; referencing keeps it in sync if it ever rotates).
-   - `ALLOWED_ORIGIN` — the deployed Netlify URL, e.g.
-     `https://toke-v02.netlify.app`. CORS rejects everything else
-     (`internal/api/router.go`'s single-origin check).
+   - `ALLOWED_ORIGIN` — the deployed Netlify URL: `https://toke-v02.netlify.app`.
+     CORS rejects everything else (`internal/api/router.go`'s single-origin
+     check).
    - `PORT` — Railway injects this itself; the server already reads it
      (`cmd/server/main.go`), no action needed.
 4. Run migrations against the new database — from a local machine, not
    inside the container (Railway's Postgres plugin exposes a public
-   connection string in its dashboard for exactly this):
+   connection string in its dashboard, under the plugin's **Connect** tab,
+   for exactly this):
    ```bash
    goose -dir apps/api/internal/db/migrations postgres "<railway-database-url>" up
    ```
 5. Deploy. `GET https://<service>.up.railway.app/healthz` should return
-   `{"status":"ok"}` once the build finishes.
-6. On the frontend (Netlify): set `VITE_API_URL` to the Railway service's
-   public URL, redeploy.
+   `{"status":"ok"}` once the build finishes. That URL is what goes into
+   Netlify's `VITE_API_URL` below.
+6. Nothing scrapes on a schedule (no job runner deployed — see the main
+   README's "Current state"). The database is empty until something calls
+   `ingest.StageBatch` → `DecideGate` → `Promote` against it, same as local
+   dev. Cheapest path for a first beta: run that from a local machine
+   pointed at the Railway `DATABASE_URL`, same shape as the local Setup
+   section, just with the Railway connection string instead of a local
+   container.
 
-**Render** (alternative): same shape — a **PostgreSQL** instance (free tier
-available) for `DATABASE_URL`, a **Web Service** pointed at this repo with
-**Root Directory** `apps/api`, Nixpacks auto-detected the same way, same
-three env vars, same `goose ... up` migration step run from a local machine
-against Render's external database URL.
+**Netlify — repointing the existing `toke-v02.netlify.app` site:**
+
+That site currently builds from the old standalone `dr-toke/skeleton` repo.
+The frontend now lives at `apps/web` inside `dr-toke/alpha-build-fullstack`
+instead — the site's build source needs to move with it:
+
+1. Netlify dashboard → the `toke-v02` site → **Site configuration** →
+   **Build & deploy** → **Continuous deployment** → **Link a different
+   repository** (or **Change repository**, wording varies by Netlify UI
+   version). Pick `dr-toke/alpha-build-fullstack`. Netlify's GitHub App
+   needs access to that repo the same way Railway's does — grant it if
+   prompted.
+2. **Base directory**: `apps/web`. **Build command**: `pnpm install && pnpm build`.
+   **Publish directory**: `apps/web/build` — confirmed against
+   `apps/web/svelte.config.js`'s `adapter-static` config (`pages: 'build',
+   assets: 'build'`), not a guess. No `netlify.toml` in this repo, so these
+   three settings live entirely in the Netlify dashboard.
+3. Environment variable: `VITE_API_URL` = the Railway `https://....up.railway.app`
+   URL from step 5 above.
+4. Trigger a deploy. Once it's live, go back to Railway and set
+   `ALLOWED_ORIGIN` to `https://toke-v02.netlify.app` if it isn't already
+   (step 3 above) — CORS is bidirectional, both sides need the other's
+   real URL, not a placeholder.
+
+**Render** (alternative to Railway): same shape — a **PostgreSQL** instance
+(free tier available) for `DATABASE_URL`, a **Web Service** pointed at
+`dr-toke/alpha-build-fullstack` with **Root Directory** `apps/api`, Nixpacks
+auto-detected the same way, same three env vars, same `goose ... up`
+migration step run from a local machine against Render's external database
+URL.
 
 **Fly.io** (alternative): `fly launch` from `apps/api/` auto-detects Go via
 its own buildpacks (no Dockerfile needed here either); attach a Postgres
