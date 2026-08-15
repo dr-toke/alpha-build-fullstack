@@ -126,10 +126,10 @@
 
 					<!-- Price block -->
 					<div
-						class="rounded-[5px] p-4 mb-4 flex items-end justify-between"
+						class="rounded-[5px] p-4 mb-4 flex items-end justify-between gap-2"
 						style="background: var(--bg2); border: 1px solid rgba(58,122,47,0.25);"
 					>
-						<div>
+						<div class="min-w-0 flex-1">
 							<div class="text-cream font-bold text-[1.6rem]">{formatINR(p.best_price_inr)}</div>
 							<div class="text-[0.7rem] text-cream2">
 								{[p.volume_ml ? `${p.volume_ml}ml` : '', p.weight_g ? `${p.weight_g}g` : ''].filter(Boolean).join(' · ')}
@@ -137,7 +137,7 @@
 							</div>
 						</div>
 						{#if pmg != null && pmgC}
-							<div class="text-right">
+							<div class="text-right shrink-0">
 								<div class="font-bold text-[1.2rem]" style={`color: ${pmgC};`}>
 									₹{pmg.toFixed(2)}/mg
 								</div>

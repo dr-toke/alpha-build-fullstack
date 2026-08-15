@@ -102,8 +102,8 @@
 			</p>
 		{/if}
 
-		<div class="mt-auto pt-2 flex items-end justify-between">
-			<div>
+		<div class="mt-auto pt-2 flex items-end justify-between gap-2">
+			<div class="min-w-0 flex-1">
 				<div class="text-cream font-semibold text-[1.05rem]">{formatINR(p.best_price_inr)}</div>
 				{#if size}
 					<div class="text-[0.65rem] text-cream2">{size}</div>
@@ -111,7 +111,7 @@
 			</div>
 			{#if cbdPmg != null && thcPmg != null}
 				<!-- Full-spectrum / vijaya: show both bases, never one ambiguous number. -->
-				<div class="text-right leading-tight">
+				<div class="text-right leading-tight shrink-0">
 					<div class="font-bold text-[0.9rem]" style={`color: ${pmgColor(cbdPmg) ?? 'var(--cream2)'};`}>
 						₹{cbdPmg.toFixed(2)}/mg <span class="text-[0.58rem] font-normal text-cream2">CBD</span>
 					</div>
@@ -120,7 +120,7 @@
 					</div>
 				</div>
 			{:else if pmg != null && pmgC}
-				<div class="text-right">
+				<div class="text-right shrink-0">
 					<div class="font-bold text-[0.95rem]" style={`color: ${pmgC};`}>
 						₹{pmg.toFixed(2)}/mg
 					</div>

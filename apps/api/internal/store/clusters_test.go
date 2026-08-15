@@ -221,7 +221,7 @@ func TestListClusters(t *testing.T) {
 		}
 	})
 
-	t.Run("SortNew includes a publishable row with no rank_score at all", func(t *testing.T) {
+	t.Run("SortNew and SortValue both include a publishable row with no rank_score at all", func(t *testing.T) {
 		var unrankedID uuid.UUID
 		if err := testStore.Pool.QueryRow(ctx,
 			`INSERT INTO product_clusters (name, concentration_type, brand_id, rank_score, publishable)
@@ -242,17 +242,30 @@ func TestListClusters(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Error("SortNew excluded a publishable, unranked cluster — should only exclude those from SortValue")
+			t.Error("SortNew excluded a publishable, unranked cluster")
 		}
 
+		// A category made entirely of unranked rows (e.g. Nutrition — hemp
+		// protein/hearts, no cannabinoid content to price per mg) must still
+		// show under the default sort, not read as "0 products". Unranked
+		// rows are included, just sorted after every ranked row.
 		gotValue, err := testStore.ListClusters(ctx, ClusterFilter{BrandID: &brandID, PublishableOnly: true, Sort: SortValue, Limit: 50})
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, c := range gotValue {
+		foundInValue := false
+		lastIsUnranked := false
+		for i, c := range gotValue {
 			if c.ID == unrankedID {
-				t.Error("SortValue included an unranked cluster — rank_score IS NOT NULL filter did not hold")
+				foundInValue = true
+				lastIsUnranked = i == len(gotValue)-1
 			}
+		}
+		if !foundInValue {
+			t.Error("SortValue excluded an unranked cluster — should sort it last, not hide it")
+		}
+		if !lastIsUnranked {
+			t.Error("SortValue did not sort the unranked cluster after all ranked ones (NULLS LAST)")
 		}
 	})
 }

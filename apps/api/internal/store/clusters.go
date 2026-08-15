@@ -311,10 +311,13 @@ func (f ClusterFilter) buildWhere(argN *int, args *[]any) string {
 			where += " AND thc_price_per_mg IS NOT NULL"
 		default:
 			// rank_score may be NULL for un-ranked rows (e.g. hemp-seed
-			// oil, no computable ₹/mg) — excluded from this ordering
-			// entirely, "value" sort has nothing meaningful to say about
-			// them.
-			where += " AND rank_score IS NOT NULL"
+			// oil, no computable ₹/mg). Previously excluded from this
+			// ordering entirely — but "value" is the API's default sort
+			// (internal/api/products.go), so a category made up entirely of
+			// such rows (Nutrition: hemp protein/hearts, no cannabinoid
+			// content at all) showed as 0 products on first load with no
+			// other sort applied. Sort them last instead of hiding them —
+			// orderByClause's NULLS LAST handles the ordering.
 		}
 	case SortPrice:
 		where += " AND best_price_paise IS NOT NULL"
@@ -376,7 +379,7 @@ func orderByClause(f ClusterFilter) string {
 		case "thc":
 			return " ORDER BY thc_price_per_mg ASC, id ASC"
 		default:
-			return " ORDER BY rank_score DESC, id ASC"
+			return " ORDER BY rank_score DESC NULLS LAST, id ASC"
 		}
 	case SortPrice:
 		return " ORDER BY best_price_paise ASC, id ASC"
