@@ -109,39 +109,49 @@
    apps/web in ../dr-toke and their utility classes resolve against these.
    ════════════════════════════════════════════════════════════════════════ */
 @theme {
-	--color-bg:     #080f08;
-	--color-bg2:    #0c1a0d;
-	--color-bg3:    #132015;
-	--color-bg4:    #1a2e1c;
-	--color-gold:   #c8a84b;
-	--color-gold2:  #e0c878;
-	--color-gold3:  #a07828;
+	/* Catalog tier, remapped onto the site's actual pink/purple/green mood
+	   palette (--paper/--ink/--mood-*, defined below) instead of the
+	   originally-ported dark green/gold scheme — project owner call: the
+	   catalog pages should read as the same site as the pink editorial
+	   pages, not a visually separate "dark world." Variable NAMES are
+	   unchanged (every ported component's inline style="" references them
+	   by name), only the VALUES move — so this recolors every catalog page
+	   without touching CatalogGrid/ProductCard/etc. individually. */
+	--color-bg:     #fde3e3;
+	--color-bg2:    #ffffff;
+	--color-bg3:    #fdeef0;
+	--color-bg4:    #f5d0d0;
+	--color-gold:   #a946d0;
+	--color-gold2:  #d477ff;
+	--color-gold3:  #7a2f9e;
 	--color-green:  #3a7a2f;
-	--color-green2: #5aaa4a;
+	--color-green2: #51ad85;
 	--color-green3: #2a5a20;
-	--color-cream:  #ede4d0;
-	--color-cream2: #b0a080;
-	--color-red2:   #e07a5a;
+	--color-cream:  #3a2a3f;
+	--color-cream2: #8a7a90;
+	--color-red2:   #da437b;
 
 	--font-display: 'Cormorant Garamond', serif;
 	--font-body:    'DM Sans', sans-serif;
 }
 
 :root {
-	/* dr-toke catalog vars — used by inline style="" in the ported components. */
-	--bg:     #080f08;
-	--bg2:    #0c1a0d;
-	--bg3:    #132015;
-	--bg4:    #1a2e1c;
-	--gold:   #c8a84b;
-	--gold2:  #e0c878;
-	--gold3:  #a07828;
+	/* dr-toke catalog vars — used by inline style="" in the ported components.
+	   See the @theme block above for why these values changed from the
+	   originally-ported dark scheme. */
+	--bg:     #fde3e3;
+	--bg2:    #ffffff;
+	--bg3:    #fdeef0;
+	--bg4:    #f5d0d0;
+	--gold:   #a946d0;
+	--gold2:  #d477ff;
+	--gold3:  #7a2f9e;
 	--green:  #3a7a2f;
-	--green2: #5aaa4a;
+	--green2: #51ad85;
 	--green3: #2a5a20;
-	--cream:  #ede4d0;
-	--cream2: #b0a080;
-	--red2:   #e07a5a;
+	--cream:  #3a2a3f;
+	--cream2: #8a7a90;
+	--red2:   #da437b;
 	--font-display: 'Cormorant Garamond';
 	--font-body:    'DM Sans';
 
