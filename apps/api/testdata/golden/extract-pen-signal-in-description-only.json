@@ -1,0 +1,13 @@
+{
+  "source": "Real cbdstore.in listing: the plain 'Cannazo Uplift Plus' SKUs (no Pen/Syringe in their OWN title) still defaulted to route=oral even after extract-pen-inhaled-not-oral.json's fix landed — because that fix only checked the dab-applicator words against the NAME, and this product's only 'Pen' mention is in its DESCRIPTION (describing the product line's delivery format, shared across variants).",
+  "raw": {
+    "title": "Cannazo Uplift Plus - Strong Full-Spectrum Medical Cannabis Extract - Super Lemon Haze",
+    "description": "An extra-strong, THC-dominant Vijaya leaf extract. Product: Cannazo Uplift Plus. Related: Cannazo De-Waxed OG Kush Uplift+ Pen (Full Spectrum THC Extract Syringe)."
+  },
+  "expect": {
+    "form": "concentrate",
+    "route": "inhaled",
+    "primary_category_legacy": "vapeable"
+  },
+  "regression_note": "This is the actual real case, not a simplification of it — 'Pen'/'Syringe' appear ONLY in the description, never in this listing's own name. facets.go's viaInhalationSignal is computed against lowAll (name+description combined) in classify(), then threaded through formDetection to resolveForm's 'extract' case, same pattern viaConcentrateMarker already established for exactly this 'signal lives in the description' problem."
+}

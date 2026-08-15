@@ -37,6 +37,17 @@ type formDetection struct {
 	// re-scanning the name afterward (the matched phrase is typically in the
 	// DESCRIPTION, and word lists alone don't capture "which path fired").
 	viaConcentrateMarker bool
+
+	// viaInhalationSignal is true when concentrate_markers, concentrateSubWords,
+	// or dabApplicatorWords matched ANYWHERE in name+description — same
+	// "can't be recovered by re-scanning just the name" problem
+	// viaConcentrateMarker exists for, but computed independently of which
+	// bucket ends up primary: it's specifically for resolveForm's "extract"
+	// case (RSO/FECO/hash-oil legacy bucket), which needs to know whether
+	// THIS product is one of the dab/vape-pen concentrates that same bucket
+	// also catches, not just whether "vapeable" happened to win overall. See
+	// that switch case's doc comment for the real product that needed this.
+	viaInhalationSignal bool
 }
 
 // classify is a faithful port of the prior alpha's
@@ -122,6 +133,29 @@ func classify(rs *CategoryRuleSet, name, description, rawCategory string) formDe
 		ev.Matched = append(ev.Matched, spans...)
 	}
 
+	// Same "undiluted/pure extract implies inhaled, not swallowed" signal,
+	// computed independently of whether it changed the primary bucket —
+	// see formDetection.viaInhalationSignal's doc comment. concentrate_markers
+	// is reused directly (a "no carrier oil" extract IS the definition of a
+	// vapeable/dab concentrate); concentrateSubWords and dabApplicatorWords
+	// are checked against the FULL text here (unlike their lowName-only use
+	// in resolveForm's "vapeable" case) because the real motivating case's
+	// only signal ("Pen") was in the description, describing the product
+	// line's delivery format, not the name of this specific listing.
+	inhalationSignal := concentrateFired
+	if !inhalationSignal {
+		if matched, spans := MatchWordBoundary(concentrateSubWords, lowAll); matched {
+			inhalationSignal = true
+			ev.Matched = append(ev.Matched, spans...)
+		}
+	}
+	if !inhalationSignal {
+		if matched, spans := MatchWordBoundary(dabApplicatorWords, lowAll); matched {
+			inhalationSignal = true
+			ev.Matched = append(ev.Matched, spans...)
+		}
+	}
+
 	// ── Coherence matrix ─────────────────────────────────────────────────────
 	if set["topical"] {
 		deleteAll(set, rs.CoherenceMatrix.IfTopicalDelete)
@@ -175,9 +209,11 @@ func classify(rs *CategoryRuleSet, name, description, rawCategory string) formDe
 	viaMarker := concentrateFired && cats[0] == "vapeable"
 	if fromDesc {
 		return formDetection{primary: cats[0], secondary: cats[1:], ambiguous: true,
-			reason: "form inferred from description only — name has no form signal", evidence: ev, viaConcentrateMarker: viaMarker}
+			reason: "form inferred from description only — name has no form signal", evidence: ev,
+			viaConcentrateMarker: viaMarker, viaInhalationSignal: inhalationSignal}
 	}
-	return formDetection{primary: cats[0], secondary: cats[1:], evidence: ev, viaConcentrateMarker: viaMarker}
+	return formDetection{primary: cats[0], secondary: cats[1:], evidence: ev,
+		viaConcentrateMarker: viaMarker, viaInhalationSignal: inhalationSignal}
 }
 
 func detectForms(rs *CategoryRuleSet, s string) (map[string]bool, Evidence) {
@@ -288,21 +324,17 @@ func resolveForm(name string, d formDetection) (form domain.FormValue, route dom
 		// dab-pen syringe) meant to be vaporized, not swallowed. Found via
 		// a live-catalog check flagged directly by a user who has actually
 		// used one of these products ("Cannazo Uplift Plus... since no
-		// carrier is there its vapable/smokable, its pure extract") — the
-		// SAME "no carrier oil" reasoning this ruleset's own
-		// concentrate_markers pattern already treats as an inhalation
-		// signal in the vapeable branch below, applied here too for
-		// consistency, plus dabApplicatorWords ("pen," "syringe") since
-		// the real motivating product's only textual signal was neither a
-		// concentrate_marker phrase nor a concentrateSubWords hit — its
-		// variant name is literally "Uplift+ Pen."
-		if d.viaConcentrateMarker {
-			return domain.FormConcentrate, domain.RouteInhaled, true, confidence, d.ambiguous, d.reason
-		}
-		if ok, _ := MatchWordBoundary(concentrateSubWords, lowName); ok {
-			return domain.FormConcentrate, domain.RouteInhaled, true, confidence, d.ambiguous, d.reason
-		}
-		if ok, _ := MatchWordBoundary(dabApplicatorWords, lowName); ok {
+		// carrier is there its vapable/smokable, its pure extract" — "most
+		// vapeable things are oral by design since vapeable is classified
+		// by it being no-carrier-oil pure extract"). d.viaInhalationSignal
+		// covers concentrate_markers ("no carrier oil" wording),
+		// concentrateSubWords (dab/shatter/distillate), and
+		// dabApplicatorWords (pen/syringe) — checked against the FULL text
+		// (name+description) in classify(), not just this name, because the
+		// real motivating product's only signal ("Pen") was in the
+		// description, describing the product line's delivery format, not
+		// this specific listing's own title.
+		if d.viaInhalationSignal {
 			return domain.FormConcentrate, domain.RouteInhaled, true, confidence, d.ambiguous, d.reason
 		}
 		return domain.FormConcentrate, domain.RouteOral, true, confidence, d.ambiguous, d.reason
